@@ -15,9 +15,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 import * as React from "react";
-import moment from "moment";
 
-import { _, llm_pgettext, pgettext } from "@/lib/translate";
+import { _, llm_pgettext, pgettext, moment } from "@/lib/translate";
 import * as DynamicHelp from "react-dynamic-help";
 
 import { GobanEngineConfig } from "goban";
@@ -136,7 +135,7 @@ export function GameLog({
                                         }
                                     >
                                         <td className="timestamp">
-                                            {moment(entry.timestamp).format("L LTS")}
+                                            {moment(entry.timestamp).utc().format("L LTS")} UTC
                                         </td>
                                         <td className="event">{decodeLogEvent(entry.event)}</td>
                                         <td className="data">
@@ -218,11 +217,34 @@ export function LogData({
         }
 
         let marks: { [mark: string]: string };
+        let removed_string = data.current_removal_string || "";
+
         if (event === "stone_removal_stones_set") {
             if (data.removed) {
+                // Stones are being marked dead - show crosses on them
                 marks = { cross: data.stones };
+                // The removed_string already contains all removed stones (current_removal_string)
+                // No need to modify it - keep all removed stones for score computation
             } else {
+                // Stones are being marked alive - show triangles on them
                 marks = { triangle: data.stones };
+                // Remove these stones from the removal string since they're now alive
+                if (removed_string && data.stones) {
+                    // cspell:disable-next-line
+                    // Parse coordinate strings as 2-character pairs (e.g., "fafbgb" -> ["fa","fb","gb"])
+                    const parseCoords = (str: string): string[] => {
+                        const coords: string[] = [];
+                        for (let i = 0; i < str.length; i += 2) {
+                            coords.push(str.substring(i, i + 2));
+                        }
+                        return coords;
+                    };
+
+                    const removedSet = new Set(parseCoords(removed_string));
+                    const changedSet = new Set(parseCoords(data.stones));
+                    changedSet.forEach((stone) => removedSet.delete(stone));
+                    removed_string = Array.from(removedSet).join("");
+                }
             }
         } else {
             marks = { cross: data.stones }; // TBD: What is this case?
@@ -231,9 +253,9 @@ export function LogData({
         setMarkedConfig({
             ...config,
             marks,
-            removed: "",
+            removed: removed_string,
         });
-    }, [config, event, data?.removed, data?.stones]);
+    }, [config, event, data?.removed, data?.stones, data?.current_removal_string]);
 
     const ret: Array<React.ReactElement> = [];
 
@@ -281,7 +303,6 @@ export function LogData({
                                 key={k}
                                 config={markedConfig}
                                 move_number={data.move_number}
-                                removal_string={data.stones}
                             />,
                         );
                     }
@@ -293,7 +314,6 @@ export function LogData({
                                 key={k}
                                 config={markedConfig}
                                 move_number={data.move_number}
-                                removal_string={data.current_removal_string || data.stones}
                             />,
                         );
                     }

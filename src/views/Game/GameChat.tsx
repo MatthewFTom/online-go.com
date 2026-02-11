@@ -18,10 +18,9 @@
 import * as data from "@/lib/data";
 import * as preferences from "@/lib/preferences";
 import * as React from "react";
-import moment from "moment";
 import { LineText } from "@/components/misc-ui";
 import { Link } from "react-router-dom";
-import { _, pgettext, interpolate, current_language } from "@/lib/translate";
+import { _, pgettext, interpolate, current_language, moment } from "@/lib/translate";
 import { Player } from "@/components/Player";
 import { profanity_filter } from "@/lib/profanity_filter";
 import { GobanRenderer, Goban, protocol } from "goban";
@@ -87,6 +86,14 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
             goban_controller.off("selected_chat_log", setSelectedChatLog);
         };
     }, [goban_controller]);
+
+    React.useEffect(() => {
+        if (!userIsPlayer && !data.get("user").is_moderator) {
+            goban_controller.setSelectedChatLog("main");
+        } else {
+            goban_controller.setSelectedChatLog(defaultChatMode);
+        }
+    }, [userIsPlayer, goban_controller]);
 
     React.useEffect(() => {
         if (!goban) {
@@ -598,8 +605,8 @@ function MarkupChatLine({ line }: { line: ChatLine }): React.ReactElement {
             <React.Fragment>
                 {chat_markup(body, [
                     {
-                        split: /(\b[a-zA-Z][0-9]{1,2}\b)/gm,
-                        pattern: /\b([a-zA-Z][0-9]{1,2})\b/gm,
+                        split: /((?<=^|\s)\b[a-zA-Z][0-9]{1,2}\b(?=\s|$))/gm,
+                        pattern: /(?<=^|\s)\b([a-zA-Z][0-9]{1,2})\b(?=\s|$)/gm,
                         replacement: (m, idx) => {
                             const pos = m[1];
                             if (parsePosition(pos, goban).i < 0) {

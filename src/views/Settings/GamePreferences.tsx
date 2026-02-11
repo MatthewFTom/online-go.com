@@ -36,9 +36,6 @@ export function GamePreferences(): React.ReactElement {
         preferences.get("dock-delay"),
     );
     const [ai_review_enabled, _setAiReviewEnabled] = usePreference("ai-review-enabled");
-    const [ai_review_categorization_method, setAiReviewCategorizationMethod] = usePreference(
-        "ai-review-categorization-method",
-    );
     const [variations_in_chat, _setVariationsInChat] = usePreference("variations-in-chat-enabled");
     const [_live_submit_mode, _setLiveSubmitMode]: [string, (x: string) => void] = React.useState(
         getSubmitMode("live"),
@@ -47,6 +44,8 @@ export function GamePreferences(): React.ReactElement {
         getSubmitMode("correspondence"),
     );
     const [chat_mode, _setChatMode] = usePreference("chat-mode");
+    const [autofocus_submit_button, setAutoFocusSubmitButton] =
+        usePreference("autofocus-submit-button");
 
     const [auto_advance, setAutoAdvance] = usePreference("auto-advance-after-submit");
     const [always_disable_analysis, setAlwaysDisableAnalysis] =
@@ -69,7 +68,7 @@ export function GamePreferences(): React.ReactElement {
         _setAiReviewEnabled(!checked);
     }
     function toggleVariationsInChat(checked: boolean) {
-        _setVariationsInChat(!checked);
+        _setVariationsInChat(checked);
     }
     function toggleZenMode(checked: boolean) {
         _setZenModeByDefault(checked);
@@ -177,6 +176,10 @@ export function GamePreferences(): React.ReactElement {
                 />
             </PreferenceLine>
 
+            <PreferenceLine title={_("Autofocus submit button")}>
+                <Toggle checked={autofocus_submit_button} onChange={setAutoFocusSubmitButton} />
+            </PreferenceLine>
+
             <PreferenceLine title={_("Auto-advance to next game after making a move")}>
                 <Toggle checked={auto_advance} onChange={setAutoAdvance} />
             </PreferenceLine>
@@ -206,18 +209,6 @@ export function GamePreferences(): React.ReactElement {
             </PreferenceLine>
 
             <PreferenceLine
-                title={_("Use new AI review categorization")}
-                description={_(
-                    "Use the new categorization method for AI reviews, which only counts positive score losses in the average score loss calculation",
-                )}
-            >
-                <Toggle
-                    checked={ai_review_categorization_method === "new"}
-                    onChange={(checked) => setAiReviewCategorizationMethod(checked ? "new" : "old")}
-                />
-            </PreferenceLine>
-
-            <PreferenceLine
                 title={_("Always disable analysis")}
                 description={_(
                     "This will disable the analysis mode and conditional moves for you in all games, even if it is not disabled in the game's settings. (If allowed in game settings, your opponent will still have access to analysis.)",
@@ -243,7 +234,7 @@ export function GamePreferences(): React.ReactElement {
                 title={_("Variations in chat")}
                 description={_("Enable variations in chat")}
             >
-                <Toggle checked={!variations_in_chat} onChange={toggleVariationsInChat} />
+                <Toggle checked={variations_in_chat} onChange={toggleVariationsInChat} />
             </PreferenceLine>
 
             <PreferenceLine

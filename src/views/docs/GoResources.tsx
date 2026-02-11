@@ -474,6 +474,11 @@ export function GoResources(): React.ReactElement {
                                 </a>
                             </span>,
                             <BasicResource
+                                countries={["us"]}
+                                title="JoblessBaduk"
+                                href="https://www.youtube.com/@JoblessBaduk"
+                            />,
+                            <BasicResource
                                 countries={["ma"]}
                                 title="MrGo 66"
                                 href="https://www.youtube.com/@mrgo66"
@@ -1133,6 +1138,11 @@ export function GoResources(): React.ReactElement {
                                 title="Go Variants"
                                 href="https://www.govariants.com/"
                             />,
+                            <BasicResource
+                                countries={[eu]}
+                                title="DipGo (Multicolour Go)"
+                                href="https://dipgo.net"
+                            />,
                         ).map((elt, idx) => (
                             <dd key={idx}>{elt}</dd>
                         ))}
@@ -1490,6 +1500,11 @@ export function GoResources(): React.ReactElement {
                     <dl>
                         <dt>{_("Music")}</dt>
                         {scramble(
+                            <BasicResource
+                                countries={[en]}
+                                title="Wave Games"
+                                href="https://wavecollector.com/wave-games/"
+                            />,
                             <BasicResource
                                 countries={[en]}
                                 title="Playing A game of Go"

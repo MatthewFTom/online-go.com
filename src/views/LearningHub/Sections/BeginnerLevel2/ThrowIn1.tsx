@@ -60,7 +60,7 @@ class Page01 extends LearningPage {
 
     text() {
         return _(
-            "The three marked stones have three liberties, so Black can not put them in atari. If Black tries to capture them by playing at A, White will connect his stones at B. But if Black sacrifies a stone at B (thrown in), White loses a liberty by capturing this stone. Next, Black can put the stones in atari and capture them. Black to play. Capture stones by throwing in.",
+            "The three marked stones have three liberties, so Black can not put them in atari. If Black tries to capture them by playing at A, White will connect his stones at B. But if Black sacrifices a stone at B (thrown in), White loses a liberty by capturing this stone. Next, Black can put the stones in atari and capture them. Black to play. Capture stones by throwing in.",
         );
     }
     config(): GobanConfig {

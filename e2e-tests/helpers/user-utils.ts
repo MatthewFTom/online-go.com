@@ -22,6 +22,7 @@ import { load } from "@helpers";
  *
  * User Creation & Registration:
  * - newTestUsername(): Generate unique test usernames with timestamp
+ * - generateUniqueTestIPv6(): Generate unique IPv6 addresses for test users
  * - registerNewUser(): Register a new user account
  * - prepareNewUser(): Register and set up a new user with basic preferences
  *
@@ -58,21 +59,46 @@ import { load } from "@helpers";
  */
 
 // This is tweaked to provide us with lots of unique usernames but also
-// a decent number of readable user-role characters, within the OGS username 20 character limit
+// a decent number of readable user-role characters, within the OGS username 30 character limit
 // on registration.
 export const newTestUsername = (user_role: string) => {
-    if (user_role.length > 12) {
-        throw new Error("user_role must be less than 13 characters");
+    if (user_role.length > 21) {
+        throw new Error("user_role must be less than 22 characters");
     }
     const timestamp = Date.now().toString(36);
-    // Tests take longer than a minute to run, so we can take 4 chars that change roughly minutely
-    // This assumes that you don't re-run a single test more than once per minute or so (47 seconds actually)
-    const midChars = timestamp.slice(-6, -2);
+    // Using 5 chars provides uniqueness roughly every 1.3 seconds
+    // This allows re-running tests with <10 second intervals
+    const midChars = timestamp.slice(-7, -2);
     return `e2e${user_role}_${midChars}`;
 };
 
+// Counter for same-millisecond IPv6 generation
+let ipv6Counter = 0;
+
+// Generate unique IPv6 addresses for test users using timestamp + counter
+// Similar approach to newTestUsername - timestamp ensures uniqueness across test runs
+// without needing shared state files
+export const generateUniqueTestIPv6 = (): string => {
+    const timestamp = Date.now().toString(16); // Use hex (base-16) for valid IPv6
+    const counter = (ipv6Counter++).toString(16).padStart(4, "0");
+
+    // Use fd00::/8 private IPv6 range for testing
+    // IPv6 segments must be 4 hex chars max, so split 8-char timestamp into two segments
+    // Format: fd00:e2e::abcd:1234:0001 where abcd:1234 is the timestamp
+    // Example: fd00:e2e::12ab:34cd:0001
+    const timestampHex = timestamp.slice(-8).padStart(8, "0");
+    const seg1 = timestampHex.slice(0, 4);
+    const seg2 = timestampHex.slice(4, 8);
+    return `fd00:e2e::${seg1}:${seg2}:${counter}`;
+};
+
 export const registerNewUser = async (browser: Browser, username: string, password: string) => {
-    const userContext = await browser.newContext();
+    const uniqueIPv6 = generateUniqueTestIPv6();
+    const userContext = await browser.newContext({
+        extraHTTPHeaders: {
+            "X-Forwarded-For": uniqueIPv6,
+        },
+    });
     const userPage = await userContext.newPage();
     await userPage.goto("/");
     // Go from "landing page" to the "sign in" page.
@@ -197,7 +223,12 @@ export const turnOffDynamicHelp = async (page: Page) => {
 // a newly registered user.
 
 export const setupSeededUser = async (browser: Browser, username: string) => {
-    const userContext = await browser.newContext();
+    const uniqueIPv6 = generateUniqueTestIPv6();
+    const userContext = await browser.newContext({
+        extraHTTPHeaders: {
+            "X-Forwarded-For": uniqueIPv6,
+        },
+    });
     const userPage = await userContext.newPage();
     await loginAsUser(userPage, username, "test");
     await turnOffDynamicHelp(userPage); // the popups can get in the way.
@@ -209,7 +240,12 @@ export const setupSeededUser = async (browser: Browser, username: string) => {
 };
 
 export const setupSeededCM = async (browser: Browser, username: string) => {
-    const seededCMContext = await browser.newContext();
+    const uniqueIPv6 = generateUniqueTestIPv6();
+    const seededCMContext = await browser.newContext({
+        extraHTTPHeaders: {
+            "X-Forwarded-For": uniqueIPv6,
+        },
+    });
     const seededCMPage = await seededCMContext.newPage();
     await loginAsUser(seededCMPage, username, "test");
     await turnOffDynamicHelp(seededCMPage); // the popups can get in the way.
@@ -259,7 +295,7 @@ export const goToUsersProfile = async (page: Page, username: string) => {
 
 // Note: if there are multiple matches, this grabs the first.   This is avoids issues if we
 // accidentally have more seed games than intended.
-export const goToUsersGame = async (page: Page, username: string, gameName: string) => {
+export const goToUsersFinishedGame = async (page: Page, username: string, gameName: string) => {
     await goToUsersProfile(page, username);
 
     const gameHistory = page.getByText("Game History");
@@ -338,7 +374,7 @@ export const assertIncidentReportIndicatorActive = async (page: Page, count: num
 
     await expect(indicator).toBeVisible();
     await expect(icon).toBeVisible();
-    await expect(countDisplay).toHaveText(`${count}`);
+    await expect(countDisplay, "Unexpected number of reports open!").toHaveText(`${count}`);
 
     return indicator;
 };
@@ -409,4 +445,65 @@ export const selectNavMenuItem = async (
 
     // Click the subitem link
     await subItemLink.click();
+};
+
+/**
+ * Suspend a user as a full moderator using the UI
+ * Requires E2E_MODERATOR_PASSWORD environment variable to be set
+ */
+export const banUserAsModerator = async (
+    browser: Browser,
+    targetUsername: string,
+    banReason: string = "E2E test suspension",
+) => {
+    const moderatorPassword = process.env.E2E_MODERATOR_PASSWORD;
+    if (!moderatorPassword) {
+        throw new Error(
+            "E2E_MODERATOR_PASSWORD environment variable must be set to suspend users in e2e tests",
+        );
+    }
+
+    const uniqueIPv6 = generateUniqueTestIPv6();
+    const modContext = await browser.newContext({
+        extraHTTPHeaders: {
+            "X-Forwarded-For": uniqueIPv6,
+        },
+    });
+    const modPage = await modContext.newPage();
+
+    await loginAsUser(modPage, "E2E_MODERATOR", moderatorPassword);
+
+    // Navigate to the user's profile
+    await goToUsersProfile(modPage, targetUsername);
+
+    // Click on the player link to open the dropdown menu
+    const playerLink = modPage.locator(`a.Player:has-text("${targetUsername}")`);
+    await expect(playerLink).toBeVisible();
+    await playerLink.hover();
+    await playerLink.click();
+
+    // Click the Suspend button
+    const banButton = await expectOGSClickableByName(modPage, /Suspend/);
+    await banButton.click();
+
+    // Fill in the ban modal
+    await expect(modPage.locator(".BanModal")).toBeVisible();
+
+    // Fill in the public reason (required, minimum 3 characters)
+    const publicReasonTextarea = modPage.locator(".BanModal textarea").first();
+    await publicReasonTextarea.fill(banReason);
+
+    // Click the Suspend button in the modal
+    const confirmSuspendButton = await expectOGSClickableByName(modPage, /^Suspend$/);
+    await confirmSuspendButton.click();
+
+    // Wait for the modal to close as confirmation the suspension was successful
+    await expect(modPage.locator(".BanModal")).toBeHidden();
+    console.log("Suspend modal closed - suspension request completed");
+
+    // Give the server a moment to process the suspension
+    await modPage.waitForTimeout(500);
+
+    await modPage.close();
+    await modContext.close();
 };

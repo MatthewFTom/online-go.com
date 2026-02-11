@@ -25,6 +25,9 @@ npm-debug.log
 .yalc
 yalc.lock
 
+# Specifically intended by claude for non-committed settings
+.claude/settings.local.json
+
 # Coverage directory used by Jest (yarn test --coverage)
 coverage
 
@@ -34,7 +37,9 @@ coverage
 /blob-report/
 /playwright/
 /e2e-tests/playwright/
-.incident_indicator.lock
+.incident-indicator.lock
 submodules/moderator-ui
+
 old-*
 i18n/*.tar.gz
+*.old

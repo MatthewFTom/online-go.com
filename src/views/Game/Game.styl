@@ -38,6 +38,12 @@
     .submit-button {
         white-space: nowrap;
     }
+    .autofocus-submit-button:focus::after {
+        content: ' ⏎';
+    }
+    .autofocus-submit-button:active::after {
+        content: none;
+    }
 }
 
 .condensed-game-information {
@@ -326,6 +332,12 @@ goban-view-bar-width = 400px;
             flex-shrink: 0;
             position: relative;
             top: 25px;
+        }
+
+        .cancel-button-zen {
+          align-self: center;
+          flex-shrink: 0;
+          position: inherit;
         }
     }
 

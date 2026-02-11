@@ -18,6 +18,9 @@
 /* cspell:disable */
 
 import { Goban } from "goban";
+import moment from "moment/min/moment-with-locales";
+
+export { moment };
 
 const w = window as { [key: string]: any }; // Add index signature
 export let current_language: string = (w["ogs_current_language"] as string) || "en";
@@ -346,6 +349,8 @@ extended_countries.push(["_Tibet", gettext("Tibet")]);
 extended_countries.push(["_United_Nations", gettext("United Nations")]);
 extended_countries.push(["_Wales", gettext("Wales")]);
 extended_countries.push(["_cat", gettext("Catalonia")]);
+extended_countries.push(["_eus", gettext("Basque Country")]);
+extended_countries.push(["_by-alt", gettext("Belarus (alternative)")]);
 
 const fantasy_countries: [string, string][] = [];
 const fantasy_countries_cc: { [key: string]: boolean } = {};
@@ -510,6 +515,7 @@ export function getCountryFlagClass(country_code: string) {
 
 export function setCurrentLanguage(language_code: string) {
     current_language = language_code;
+    moment.locale(language_code);
 
     Goban.setTranslations({
         "Your move": _("Your move"),

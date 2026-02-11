@@ -17,7 +17,7 @@
 
 import * as React from "react";
 import { useLocation } from "react-router-dom";
-import { interpolate, _ } from "@/lib/translate";
+import { interpolate, _, moment } from "@/lib/translate";
 import { Card, PopupMenu, PopupMenuItem } from "@/components/material";
 import { UIPush } from "@/components/UIPush";
 
@@ -40,7 +40,6 @@ import { AnnouncementEntry } from "./AnnouncementEntry";
 
 import * as data from "@/lib/data";
 import * as preferences from "@/lib/preferences";
-import moment from "moment";
 
 import { alert } from "@/lib/swal_config";
 
@@ -335,7 +334,7 @@ export const ActiveAnnouncements: React.FC = React.memo(() => {
                         return null;
                     }
 
-                    const displayableEntries = getDisplayableEntries(announcement.entries);
+                    const displayableEntries = getDisplayableEntries(announcement);
                     if (displayableEntries.length === 0) {
                         return null;
                     }

@@ -134,124 +134,68 @@ import { BL2Eye1 } from "./Sections/BeginnerLevel2/Eye1";
 import { BL2Eye2 } from "./Sections/BeginnerLevel2/Eye2";
 import { BL2Eye3 } from "./Sections/BeginnerLevel2/Eye3";
 import { BL2Endgame1 } from "./Sections/BeginnerLevel2/Endgame1";
-
-// export class FalseEyes extends LearningHubSection {
-//     static section(): string {
-//         return "false-eyes";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on false eyes", "False Eyes");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on false eyes", "Some eyes aren't really eyes");
-//     }
-// }
-// export class CuttingStones extends LearningHubSection {
-//     static section(): string {
-//         return "cutting-stones";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on cutting stones", "Cutting Stones");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on cutting stones", "");
-//     }
-// }
-// export class JumpingStones extends LearningHubSection {
-//     static section(): string {
-//         return "jumping-stones";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on jumping stones", "Jumping Stones");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on jumping stones", "");
-//     }
-// }
-
-// export class Semeai extends LearningHubSection {
-//     static section(): string {
-//         return "semeai";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on semeai", "Semeai");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on semeai", "Attacking each other");
-//     }
-// }
-// export class CountingLiberties extends LearningHubSection {
-//     static section(): string {
-//         return "counting-liberties";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on counting liberties", "Counting Liberties");
-//     }
-//     static subtext(): string {
-//         return pgettext(
-//             "Tutorial section on counting liberties",
-//             "Known when you can win a battle",
-//         );
-//     }
-// }
-// export class WhatIsGo extends LearningHubSection {
-//     static section(): string {
-//         return "what-is-go";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on what is go", "What is Go?");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on what is go", "");
-//     }
-// }
-// export class SportOfGoAndGoAsArt extends LearningHubSection {
-//     static section(): string {
-//         return "sport-of-go-and-go-as-art";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on the sport of Go", "Sport of Go");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on the sport of Go", "Go as Art");
-//     }
-// }
-// export class BenefitsOfLearningGo extends LearningHubSection {
-//     static section(): string {
-//         return "benefits-of-learning-go";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on benefits to learning go", "Benefits of learning Go");
-//     }
-//     static subtext(): string {
-//         return pgettext(
-//             "Tutorial section on benefits to learning go",
-//             "It's more than just a game!",
-//         );
-//     }
-// }
-// export class BasicMannersOfGo extends LearningHubSection {
-//     static section(): string {
-//         return "basic-manners-of-go";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on the manners in the game", "Basic manners of Go");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on the manners in the game", "Be polite, it's Go!");
-//     }
-// }
-// export class Terminology extends LearningHubSection {
-//     static section(): string {
-//         return "terminology";
-//     }
-//     static title(): string {
-//         return pgettext("Tutorial section on terminology", "Terminology");
-//     }
-//     static subtext(): string {
-//         return pgettext("Tutorial section on terminology", "Say what now?");
-//     }
-// }
+import { BL2Endgame2 } from "./Sections/BeginnerLevel2/Endgame2";
+import { BL2Endgame3 } from "./Sections/BeginnerLevel2/Endgame3";
+import { BL2Endgame4 } from "./Sections/BeginnerLevel2/Endgame4";
+import { BL2Endgame5 } from "./Sections/BeginnerLevel2/Endgame5";
+import { BL2LifeDeath1 } from "./Sections/BeginnerLevel2/LifeDeath1";
+import { BL2LifeDeath2 } from "./Sections/BeginnerLevel2/LifeDeath2";
+import { BL2LifeDeath3 } from "./Sections/BeginnerLevel2/LifeDeath3";
+import { BL2LifeDeath4 } from "./Sections/BeginnerLevel2/LifeDeath4";
+import { BL2LifeDeath5 } from "./Sections/BeginnerLevel2/LifeDeath5";
+import { BL2LifeDeath6 } from "./Sections/BeginnerLevel2/LifeDeath6";
+import { BL2Ko1 } from "./Sections/BeginnerLevel2/Ko1";
+import { BL2Ko2 } from "./Sections/BeginnerLevel2/Ko2";
+import { BL2Ko3 } from "./Sections/BeginnerLevel2/Ko3";
+import { BL2Haengma1 } from "./Sections/BeginnerLevel2/Haengma1";
+import { BL2Haengma2 } from "./Sections/BeginnerLevel2/Haengma2";
+import { BL2Haengma3 } from "./Sections/BeginnerLevel2/Haengma3";
+import { BL2Haengma4 } from "./Sections/BeginnerLevel2/Haengma4";
+import { BL2Haengma5 } from "./Sections/BeginnerLevel2/Haengma5";
+import { BL2Shape1 } from "./Sections/BeginnerLevel2/Shape1";
+import { BL2Shape2 } from "./Sections/BeginnerLevel2/Shape2";
+import { BL2CapturingRace1 } from "./Sections/BeginnerLevel2/CapturingRace1";
+import { BL2CapturingRace2 } from "./Sections/BeginnerLevel2/CapturingRace2";
+import { BL2CapturingRace3 } from "./Sections/BeginnerLevel2/CapturingRace3";
+import { BL2CapturingRace4 } from "./Sections/BeginnerLevel2/CapturingRace4";
+import { BL2CapturingRace5 } from "./Sections/BeginnerLevel2/CapturingRace5";
+import { BL3Capture1 } from "./Sections/BeginnerLevel3/Capture1";
+import { BL3Capture2 } from "./Sections/BeginnerLevel3/Capture2";
+import { BL3Capture3 } from "./Sections/BeginnerLevel3/Capture3";
+import { BL3Capture4 } from "./Sections/BeginnerLevel3/Capture4";
+import { BL3Capture5 } from "./Sections/BeginnerLevel3/Capture5";
+import { BL3Capture6 } from "./Sections/BeginnerLevel3/Capture6";
+import { BL3Capture7 } from "./Sections/BeginnerLevel3/Capture7";
+import { BL3Joseki1 } from "./Sections/BeginnerLevel3/Joseki1";
+import { BL3Joseki2 } from "./Sections/BeginnerLevel3/Joseki2";
+import { BL3Joseki3 } from "./Sections/BeginnerLevel3/Joseki3";
+import { BL3Joseki4 } from "./Sections/BeginnerLevel3/Joseki4";
+import { BL3Opening1 } from "./Sections/BeginnerLevel3/Opening1";
+import { BL3Opening2 } from "./Sections/BeginnerLevel3/Opening2";
+import { BL3Opening3 } from "./Sections/BeginnerLevel3/Opening3";
+import { BL3Opening4 } from "./Sections/BeginnerLevel3/Opening4";
+import { BL3Haengma1 } from "./Sections/BeginnerLevel3/Haengma1";
+import { BL3Haengma2 } from "./Sections/BeginnerLevel3/Haengma2";
+import { BL3Haengma3 } from "./Sections/BeginnerLevel3/Haengma3";
+import { BL3Haengma4 } from "./Sections/BeginnerLevel3/Haengma4";
+import { BL3Seki1 } from "./Sections/BeginnerLevel3/Seki1";
+import { BL3Seki2 } from "./Sections/BeginnerLevel3/Seki2";
+import { BL3Skills1 } from "./Sections/BeginnerLevel3/Skills1";
+import { BL3Skills2 } from "./Sections/BeginnerLevel3/Skills2";
+import { BL3Skills3 } from "./Sections/BeginnerLevel3/Skills3";
+import { BL3Skills4 } from "./Sections/BeginnerLevel3/Skills4";
+import { BL3Skills5 } from "./Sections/BeginnerLevel3/Skills5";
+import { BL3Skills6 } from "./Sections/BeginnerLevel3/Skills6";
+import { BL3Skills7 } from "./Sections/BeginnerLevel3/Skills7";
+import { BL3Endgame1 } from "./Sections/BeginnerLevel3/Endgame1";
+import { BL3Endgame2 } from "./Sections/BeginnerLevel3/Endgame2";
+import { BL3Endgame3 } from "./Sections/BeginnerLevel3/Endgame3";
+import { BL3Endgame4 } from "./Sections/BeginnerLevel3/Endgame4";
+import { BL3Endgame5 } from "./Sections/BeginnerLevel3/Endgame5";
+import { BL3FalseEye1 } from "./Sections/BeginnerLevel3/FalseEye1";
+import { BL3FalseEye2 } from "./Sections/BeginnerLevel3/FalseEye2";
+import { BL3FalseEye3 } from "./Sections/BeginnerLevel3/FalseEye3";
+import { BL3FalseEye4 } from "./Sections/BeginnerLevel3/FalseEye4";
 
 export const sections: [string, any[]][] = [
     [
@@ -384,6 +328,73 @@ export const sections: [string, any[]][] = [
             BL2Eye2,
             BL2Eye3,
             BL2Endgame1,
+            BL2Endgame2,
+            BL2Endgame3,
+            BL2Endgame4,
+            BL2Endgame5,
+            BL2LifeDeath1,
+            BL2LifeDeath2,
+            BL2LifeDeath3,
+            BL2LifeDeath4,
+            BL2LifeDeath5,
+            BL2LifeDeath6,
+            BL2Ko1,
+            BL2Ko2,
+            BL2Ko3,
+            BL2Haengma1,
+            BL2Haengma2,
+            BL2Haengma3,
+            BL2Haengma4,
+            BL2Haengma5,
+            BL2Shape1,
+            BL2Shape2,
+            BL2CapturingRace1,
+            BL2CapturingRace2,
+            BL2CapturingRace3,
+            BL2CapturingRace4,
+            BL2CapturingRace5,
+        ],
+    ],
+    [
+        pgettext("Learning hub section title", "Beginner Level 3"),
+        [
+            BL3Capture1,
+            BL3Capture2,
+            BL3Capture3,
+            BL3Capture4,
+            BL3Capture5,
+            BL3Capture6,
+            BL3Capture7,
+            BL3Joseki1,
+            BL3Joseki2,
+            BL3Joseki3,
+            BL3Joseki4,
+            BL3Opening1,
+            BL3Opening2,
+            BL3Opening3,
+            BL3Opening4,
+            BL3Haengma1,
+            BL3Haengma2,
+            BL3Haengma3,
+            BL3Haengma4,
+            BL3Seki1,
+            BL3Seki2,
+            BL3Skills1,
+            BL3Skills2,
+            BL3Skills3,
+            BL3Skills4,
+            BL3Skills5,
+            BL3Skills6,
+            BL3Skills7,
+            BL3Endgame1,
+            BL3Endgame2,
+            BL3Endgame3,
+            BL3Endgame4,
+            BL3Endgame5,
+            BL3FalseEye1,
+            BL3FalseEye2,
+            BL3FalseEye3,
+            BL3FalseEye4,
         ],
     ],
 

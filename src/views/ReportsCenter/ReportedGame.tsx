@@ -16,19 +16,17 @@
  */
 
 import * as React from "react";
-import moment from "moment";
 import { useRefresh } from "@/lib/hooks";
 import { shortTimeControl } from "@/components/TimeControl";
-import { _, pgettext } from "@/lib/translate";
+import { _, pgettext, moment } from "@/lib/translate";
 import { Link } from "react-router-dom";
 import { MiniGoban } from "@/components/MiniGoban";
 import { alert } from "@/lib/swal_config";
 import { post, get } from "@/lib/requests";
 import { errorAlerter, showSecondsResolution } from "@/lib/misc";
-import { doAnnul } from "@/lib/moderation";
+import { doAnnul, MODERATOR_POWERS } from "@/lib/moderation";
 
 import {
-    AIReview,
     GameTimings,
     GameChat,
     GobanControllerContext,
@@ -36,6 +34,7 @@ import {
     GameLog,
     useGobanController,
 } from "@/views/Game";
+import { AIReview } from "@/components/AIReview";
 import { GobanRenderer } from "goban";
 import { Resizable } from "@/components/Resizable";
 
@@ -47,12 +46,15 @@ export function ReportedGame({
     reported_at,
     reported_by,
     onGobanCreated,
+    simul,
 }: {
     game_id: number;
     reported_at: number | undefined;
     reported_by: number;
     onGobanCreated?: (goban: GobanRenderer) => void;
+    simul?: boolean;
 }): React.ReactElement | null {
+    const user = useUser();
     const [goban, setGoban] = React.useState<GobanRenderer | null>(null);
     const [goban_controller, setGameController] = React.useState<GobanController | null>(null);
     const refresh = useRefresh();
@@ -106,9 +108,12 @@ export function ReportedGame({
         <div className="reported-game">
             <div className="reported-game-container">
                 <div className="reported-game-element">
-                    <div className="reported-game-other-info">
-                        {(!!goban?.engine?.config && !goban.engine.config.ranked && "(Unranked)") ||
-                            ""}
+                    <div className="reported-game-important-info">
+                        <span>
+                            {!!goban?.engine?.config &&
+                                !goban.engine.config.ranked &&
+                                _("Unranked")}
+                        </span>
                     </div>
                     {/*  This element is providing the goban used by the goban provider wrapped around the rest of them */}
                     <MiniGoban
@@ -187,6 +192,17 @@ export function ReportedGame({
                         </div>
 
                         <div className="reported-game-element">
+                            {simul &&
+                                (user.is_moderator ||
+                                    (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !==
+                                        0) && (
+                                    <div className="simul-warning">
+                                        {pgettext(
+                                            "A label that means the game is played at the same time as another game",
+                                            "Simul",
+                                        )}
+                                    </div>
+                                )}
                             <GameTimings
                                 moves={goban.engine.config.moves as any}
                                 start_time={goban.engine.config.start_time as any}

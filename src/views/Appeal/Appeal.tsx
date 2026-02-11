@@ -17,15 +17,16 @@
 
 import * as React from "react";
 import * as data from "@/lib/data";
-import moment from "moment";
 import { Card } from "@/components/material";
-import { post, get, patch } from "@/lib/requests";
-import { _, pgettext, interpolate } from "@/lib/translate";
+import { post, get, patch, put } from "@/lib/requests";
+import { _, pgettext, interpolate, moment } from "@/lib/translate";
 import { errorAlerter } from "@/lib/misc";
 import { useParams } from "react-router-dom";
 import { Player } from "@/components/Player";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { UIPush } from "@/components/UIPush";
+import { getPrivateChat } from "@/components/PrivateChat";
+import * as player_cache from "@/lib/player_cache";
 
 interface AppealMessage {
     id: number;
@@ -149,24 +150,63 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
                     onChange={(ev) => setMessageText(ev.target.value)}
                     placeholder={placeholder}
                 />
+                {(mod || null) && (
+                    <div className="hidden-checkbox">
+                        <label htmlFor="hidden">Hidden</label>
+                        <input
+                            id="hidden"
+                            type="checkbox"
+                            checked={hidden}
+                            onChange={(ev) => setHidden(ev.target.checked)}
+                        />
+                    </div>
+                )}
                 <div className="submit-and-hidden">
-                    <button
-                        className="primary"
-                        onClick={submit}
-                        disabled={messageText.length < (mod ? 2 : 20)}
-                    >
-                        {_("Submit")}
-                    </button>
-                    {(mod || null) && (
-                        <span>
-                            <label htmlFor="hidden">Hidden</label>
-                            <input
-                                id="hidden"
-                                type="checkbox"
-                                checked={hidden}
-                                onChange={(ev) => setHidden(ev.target.checked)}
-                            />
-                        </span>
+                    {mod ? (
+                        <>
+                            {!hidden && still_banned ? (
+                                <>
+                                    <button
+                                        className="primary"
+                                        onClick={submit}
+                                        disabled={messageText.length < 2}
+                                    >
+                                        {_("Leave Suspended")}
+                                    </button>
+                                    <button
+                                        className="success"
+                                        onClick={restoreAndSubmit}
+                                        disabled={messageText.length < 2}
+                                    >
+                                        {_("Restore Account")}
+                                    </button>
+                                </>
+                            ) : !hidden && !still_banned ? (
+                                <button
+                                    className="primary"
+                                    onClick={sendSystemPMOnly}
+                                    disabled={messageText.length < 2}
+                                >
+                                    {_("System PM")}
+                                </button>
+                            ) : (
+                                <button
+                                    className="primary"
+                                    onClick={submit}
+                                    disabled={messageText.length < 2}
+                                >
+                                    {_("Submit")}
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        <button
+                            className="primary"
+                            onClick={submit}
+                            disabled={messageText.length < (mod ? 2 : 20)}
+                        >
+                            {_("Submit")}
+                        </button>
                     )}
                 </div>
             </Card>
@@ -199,8 +239,71 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
         })
             .then((response) => {
                 console.log(response);
+
+                // If the user is not suspended and this is a moderator message,
+                // send the message as a system PM so the user can see it
+                if (!still_banned && mod && !hidden) {
+                    sendSystemPM();
+                }
             })
             .catch(errorAlerter);
+        setMessageText("");
+    }
+
+    function restoreAndSubmit() {
+        if (!messageText.trim()) {
+            errorAlerter(new Error("Please enter a message before restoring the account."));
+            return;
+        }
+
+        // First, post the appeal message
+        post("appeal/messages", {
+            player_id,
+            jwt: jwt_key,
+            text: messageText,
+            hidden: hidden,
+        })
+            .then((response) => {
+                console.log(response);
+
+                // Then restore the account
+                const numeric_player_id =
+                    typeof player_id === "string" ? parseInt(player_id) : player_id;
+                return put(`players/${numeric_player_id}/moderate`, {
+                    is_banned: 0,
+                    moderation_note: "Account restored via appeal",
+                });
+            })
+            .then(() => {
+                // After restoring, send the message as a system PM (unless hidden)
+                if (!hidden) {
+                    sendSystemPM();
+                }
+                // Refresh to update the UI
+                refresh();
+            })
+            .catch(errorAlerter);
+        setMessageText("");
+    }
+
+    function sendSystemPM() {
+        const numeric_player_id = typeof player_id === "string" ? parseInt(player_id) : player_id;
+        player_cache
+            .fetch(numeric_player_id)
+            .then((player) => {
+                const pc = getPrivateChat(player.id, player.username || "");
+                pc.sendChat(messageText, true);
+            })
+            .catch(errorAlerter);
+    }
+
+    function sendSystemPMOnly() {
+        if (!messageText.trim()) {
+            errorAlerter(new Error("Please enter a message before sending."));
+            return;
+        }
+
+        sendSystemPM();
         setMessageText("");
     }
 

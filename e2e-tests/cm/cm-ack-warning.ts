@@ -34,7 +34,7 @@ import { Browser, TestInfo } from "@playwright/test";
 import {
     assertIncidentReportIndicatorActive,
     assertIncidentReportIndicatorInactive,
-    goToUsersGame,
+    goToUsersFinishedGame,
     newTestUsername,
     prepareNewUser,
     reportUser,
@@ -55,7 +55,7 @@ export const cmAckWarningTest = async ({ browser }: { browser: Browser }, testIn
         );
 
         // Report someone for AI use
-        await goToUsersGame(reporterPage, "E2E_CM_VWNAI_ACCUSED", "E2E CM VWNAI Game");
+        await goToUsersFinishedGame(reporterPage, "E2E_CM_VWNAI_ACCUSED", "E2E CM VWNAI Game");
 
         await reportUser(
             reporterPage,
@@ -81,7 +81,7 @@ export const cmAckWarningTest = async ({ browser }: { browser: Browser }, testIn
         ).toBeVisible();
 
         // Select the not-AI option...
-        await aiCMPage.locator('.action-selector input[type="radio"]').nth(3).click();
+        await aiCMPage.locator('.action-selector input[type="radio"]').nth(4).click();
 
         const voteButton = await expectOGSClickableByName(aiCMPage, /Vote$/);
         await voteButton.click();

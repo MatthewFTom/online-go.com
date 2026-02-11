@@ -45,6 +45,7 @@ export const defaults = {
     "always-disable-analysis": false,
     "asked-to-enable-desktop-notifications": false,
     "auto-advance-after-submit": true,
+    "autofocus-submit-button": false,
     "autoplay-delay": 10000,
     "play.tab": "automatch" as "automatch" | "custom",
     "automatch.size": "9x9" as Size,
@@ -53,7 +54,8 @@ export const defaults = {
     "automatch.handicaps": "standard" as "enabled" | "standard" | "disabled",
     "automatch.time-control": "fischer" as "fischer" | "byoyomi",
     "automatch.opponent": "human" as "human" | "bot",
-    "automatch.bot": 0,
+    "automatch.bot": 0 as number | string,
+    "automatch.bot-ranked": false as boolean,
     "automatch.lower-rank-diff": 3,
     "automatch.upper-rank-diff": 3,
     "automatch.show-custom-games": false,
@@ -158,6 +160,7 @@ export const defaults = {
     "sound.countdown.every-second.start": 10,
     "sound.countdown.byoyomi-direction": "auto",
     "sound.vibrate-on-stone-placement": true,
+    "sound.vibrate-on-game-start": true,
     "sound.positional-stone-placement-effect": true,
 
     "supporter.currency": "auto",
@@ -224,6 +227,12 @@ export const defaults = {
     "user-history.show-mod-log": false,
     "user-history.warnings-only": false,
     "debug.test-wanted": false,
+    "learning-hub-expanded-section": "Fundamentals",
+
+    "bot.challenge-level": 2 as 1 | 2 | 3,
+    "bot.slug": "" as string,
+    "bot.color": "random" as "random" | "white" | "black",
+    "bot.last-selected-id": undefined as string | number | undefined,
 };
 
 defaults["profanity-filter"][current_language] = true;
