@@ -25,20 +25,30 @@
  * - E2E_CM_OTHER_VOOR : The other person in that game (who's name must not match E2E_CM_VOOR_! See below!)
  */
 
-import { Browser, TestInfo, expect } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo, expect } from "@playwright/test";
 
 import { expectOGSClickableByName } from "@helpers/matchers";
-import { goToUsersFinishedGame, reportUser, setupSeededUser } from "@helpers/user-utils";
+import {
+    captureReportNumber,
+    goToUsersFinishedGame,
+    navigateToReport,
+    reportUser,
+    setupSeededUser,
+} from "@helpers/user-utils";
 
-import { withIncidentIndicatorLock } from "@helpers/report-utils";
+import { withReportCountTracking } from "@helpers/report-utils";
 
 export const cmVoteOnOwnReportTest = async (
-    { browser }: { browser: Browser },
+    {
+        createContext,
+    }: { createContext: (options?: CreateContextOptions) => Promise<BrowserContext> },
     testInfo: TestInfo,
 ) => {
-    await withIncidentIndicatorLock(testInfo, async () => {
-        const { userPage: reporterPage } = await setupSeededUser(browser, "E2E_CM_VOOR_REPORTER");
+    const { userPage: reporterPage } = await setupSeededUser(createContext, "E2E_CM_VOOR_REPORTER");
 
+    await withReportCountTracking(reporterPage, testInfo, async (tracker) => {
         await goToUsersFinishedGame(reporterPage, "E2E_CM_VOOR_REPORTED", "E2E CM VOOR Game");
 
         // ... and report the user
@@ -50,29 +60,47 @@ export const cmVoteOnOwnReportTest = async (
             "E2E test reporting a score cheat",
         );
 
-        // Go to the report page
-        await reporterPage.goto("/reports-center");
-        const myReports = reporterPage.getByText("My Own Reports");
-        await expect(myReports).toBeVisible();
-        await myReports.click();
+        // Verify reporter's count increased by 1
+        await tracker.assertCountIncreasedBy(reporterPage, 1);
 
-        // We assume that the report is the first one in the list
-        const reportButton = reporterPage.locator(".report-id > button");
-        await reportButton.click();
+        // Capture the report number to navigate to the specific report
+        const reportNumber = await captureReportNumber(reporterPage);
+
+        // Navigate to the specific report
+        await navigateToReport(reporterPage, reportNumber);
 
         // Select an option...
-        await reporterPage.locator('.action-selector input[type="radio"]').first().click();
+        const radioButton = reporterPage.locator('.action-selector input[type="radio"]').first();
+        await radioButton.click();
+        await expect(radioButton).toBeChecked();
 
         // ... then we should be allowed to vote.
 
         await expectOGSClickableByName(reporterPage, /Vote$/);
 
         // .. but instead, let's cancel this report, to tidy up.
-
+        // Navigate to My Own Reports
+        await reporterPage.goto("/reports-center");
+        const myReports = reporterPage.getByText("My Own Reports");
+        await expect(myReports).toBeVisible();
         await myReports.click();
-        const cancelButton = await expectOGSClickableByName(reporterPage, /Cancel$/);
+
+        // Find the specific report's container and click its Cancel button
+        // Each report is in a div.incident container
+        // Use the data-report-id attribute on the button to find the correct report
+        // (The displayed report number is truncated to 3 digits, but data-report-id has full ID)
+        const reportId = reportNumber.replace(/^R/, "");
+        const reportContainer = reporterPage
+            .locator("div.incident")
+            .filter({ has: reporterPage.locator(`button[data-report-id="${reportId}"]`) });
+        await expect(reportContainer).toBeVisible();
+
+        // Find the Cancel button within this specific report's container
+        const cancelButton = reportContainer.locator("button.reject.xs", { hasText: "Cancel" });
+        await expect(cancelButton).toBeVisible();
         await cancelButton.click();
 
-        await expect(reportButton).toBeHidden();
+        // After canceling the report, the count should return to initial
+        await tracker.assertCountReturnedToInitial(reporterPage);
     });
 };

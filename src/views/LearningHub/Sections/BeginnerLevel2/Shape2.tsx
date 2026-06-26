@@ -20,7 +20,7 @@ import { GobanConfig } from "goban";
 import { LearningPage, LearningPageProperties } from "../../LearningPage";
 import { _, pgettext } from "@/lib/translate";
 import { LearningHubSection } from "../../LearningHubSection";
-import React from "react";
+import * as React from "react";
 
 export class BL2Shape2 extends LearningHubSection {
     static pages(): Array<typeof LearningPage> {
@@ -150,7 +150,7 @@ class Page02 extends LearningPage {
                 <div>
                     <p>
                         {_(
-                            "A group is weak if it can easily be attacked and can be captured or cut off. A weak group does not have good eye-shape. In this example the white wall has two cutting points. That is why the shape of the stones is weak. Does the white group have a strong or weak shape?",
+                            "A group is weak if it can easily be attacked and can be captured or cut off. A weak group does not have good eye-shape. In this example the white wall has two cutting points. Does the white group have a strong or weak shape?",
                         )}
                     </p>
                     <label>

@@ -14,7 +14,7 @@
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-import "./RatingsChartDistribution.styl";
+import "./RatingsChartDistribution.css";
 import * as React from "react";
 import { ResponsiveLine } from "@nivo/line";
 import { _, interpolate, pgettext, gettext } from "@/lib/translate";
@@ -248,7 +248,8 @@ const RatingsChartDistribution: React.FC<RatingsChartDistributionProps> = ({
                 "lines",
                 "markers",
                 "legends",
-                ({ xScale }: { xScale: (value: number) => number }) => {
+                (props: any) => {
+                    const xScale = props.xScale as (value: number) => number;
                     if (myRating) {
                         return (
                             <circle
@@ -296,8 +297,15 @@ const RatingsChartDistribution: React.FC<RatingsChartDistributionProps> = ({
             }}
             axisBottom={{
                 tickValues: 8,
-                format: (value) =>
-                    showRatings ? value.toString() : boundedRankString(rating_to_rank(value), true),
+                format: (value) => {
+                    if (showRatings) {
+                        return value.toString();
+                    }
+                    if (value <= chartData.effectiveMinRating) {
+                        return "";
+                    }
+                    return boundedRankString(rating_to_rank(value), true);
+                },
             }}
             theme={getColoredAxis(line1Color)}
             xScale={{
@@ -429,14 +437,14 @@ const RatingsChartDistribution: React.FC<RatingsChartDistributionProps> = ({
                                 key={point.id}
                                 style={{
                                     color:
-                                        point.serieColor === "rgba(0, 0, 0, 0)"
+                                        point.seriesColor === "rgba(0, 0, 0, 0)"
                                             ? line1Color
-                                            : point.serieColor,
+                                            : point.seriesColor,
                                     padding: "3px 0",
                                 }}
                             >
-                                <strong>{gettext(String(point.serieId))}:</strong>{" "}
-                                {point.serieId === "Cumulative"
+                                <strong>{gettext(String(point.seriesId))}:</strong>{" "}
+                                {point.seriesId === "Cumulative"
                                     ? `${(Number(point.data.y) * 100).toFixed(2)}%`
                                     : point.data.yFormatted}
                             </div>

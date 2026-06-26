@@ -16,8 +16,8 @@
  */
 
 import * as React from "react";
-import * as data from "@/lib/data";
 import { _ } from "@/lib/translate";
+import "./Developer.css";
 
 export class Developer extends React.PureComponent {
     constructor(props: {}) {
@@ -35,51 +35,22 @@ export class Developer extends React.PureComponent {
                 </h2>
                 <iframe src="https://ghbtns.com/github-btn.html?user=online-go&repo=online-go.com&type=star&count=true&size=large"></iframe>
                 <iframe src="https://ghbtns.com/github-btn.html?user=online-go&repo=online-go.com&type=fork&count=true&size=large"></iframe>
-
+                <h1>Design Documentation</h1>
+                <h2>
+                    <a href="https://deepwiki.com/online-go/online-go.com">Deep-wiki docs</a>
+                </h2>
                 <h1>{_("Application management")}</h1>
                 <h2>
                     <a href="/oauth2/applications/">OAuth2 Application Manager</a>
                 </h2>
-
-                <h1>API</h1>
-                <div className="row">
-                    <div>
-                        <a href="/api/" target="_self">
-                            <img
-                                src={data.get("config.cdn_release") + "/img/drf-logo.png"}
-                                className="top-image"
-                            />
-                        </a>
-                    </div>
-                </div>
-
-                <h1>Documentation</h1>
-                <div>
-                    <div>
-                        <a target="_blank" href="http://docs.ogs.apiary.io/">
-                            <img
-                                src={data.get("config.cdn_release") + "/img/apiary-on-white.png"}
-                                className="top-image"
-                            />
-                        </a>
-                    </div>
-                    <div>
-                        <a
-                            target="_blank"
-                            href="http://ogs.readme.io/"
-                            style={{ paddingTop: "20px", display: "inline-block" }}
-                        >
-                            <span
-                                style={{
-                                    fontSize: "60px",
-                                    fontFamily: '"Courier New", Courier, monospace',
-                                }}
-                            >
-                                <b>read</b>me.io
-                            </span>
-                        </a>
-                    </div>
-                </div>
+                <hr></hr>
+                <h1>API Documentation</h1>
+                <h2>(out-dated)</h2>
+                <h2>
+                    <a href="https://docs.online-go.com" target="_blank">
+                        https://docs.online-go.com
+                    </a>
+                </h2>
             </div>
         );
     }

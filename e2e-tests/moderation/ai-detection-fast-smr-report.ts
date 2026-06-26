@@ -27,21 +27,28 @@
  * Requires E2E_MODERATOR_PASSWORD environment variable to be set.
  */
 
-import { Browser, expect } from "@playwright/test";
-import { generateUniqueTestIPv6, loginAsUser, turnOffDynamicHelp } from "../helpers/user-utils";
+import type { CreateContextOptions } from "@helpers";
 
-export const aiDetectionFastSMRReportTest = async ({ browser }: { browser: Browser }) => {
-    console.log("=== AI Detection FastSMR Report Button Test ===");
+import { BrowserContext, expect } from "@playwright/test";
+import { generateUniqueTestIPv6, loginAsUser, turnOffDynamicHelp } from "../helpers/user-utils";
+import { log } from "@helpers/logger";
+
+export const aiDetectionFastSMRReportTest = async ({
+    createContext,
+}: {
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>;
+}) => {
+    log("=== AI Detection FastSMR Report Button Test ===");
 
     // 1. Set up seeded moderator
-    console.log("Setting up moderator account...");
+    log("Setting up moderator account...");
     const moderatorPassword = process.env.E2E_MODERATOR_PASSWORD;
     if (!moderatorPassword) {
         throw new Error("E2E_MODERATOR_PASSWORD environment variable must be set to run this test");
     }
 
     const uniqueIPv6 = generateUniqueTestIPv6();
-    const modContext = await browser.newContext({
+    const modContext = await createContext({
         extraHTTPHeaders: {
             "X-Forwarded-For": uniqueIPv6,
         },
@@ -50,94 +57,51 @@ export const aiDetectionFastSMRReportTest = async ({ browser }: { browser: Brows
 
     await loginAsUser(modPage, "E2E_MODERATOR", moderatorPassword);
     await turnOffDynamicHelp(modPage);
-    console.log("Moderator logged in ✓");
+    log("Moderator logged in ✓");
 
     // Note: We skip checking initial report count since it's difficult to verify in tests
     // The toast notification will confirm the report was created
 
     // 3. Navigate to the AI Detection page
-    console.log("Navigating to AI Detection page...");
+    log("Navigating to AI Detection page...");
     await modPage.goto("/moderator/ai-detection");
-    await modPage.waitForLoadState("networkidle");
     await expect(modPage.getByRole("heading", { name: /AI Detection/i })).toBeVisible();
-    console.log("AI Detection page loaded ✓");
+    log("AI Detection page loaded ✓");
 
-    // 4. Wait for the table to finish loading
-    console.log("Waiting for game data to load...");
-    const loadingOverlay = modPage.locator(".ai-detection .loading-overlay");
-    await loadingOverlay.waitFor({ state: "hidden", timeout: 10000 });
-    console.log("Loading overlay hidden - data loaded ✓");
-
-    // 5. Check if there are any games in the table
+    // 4. Wait for the table data to load by waiting for actual game rows
+    log("Waiting for game data to load...");
     const gameRows = modPage.locator(".ai-detection tr").filter({ hasText: /#\d+/ });
+
+    // Wait for first row to appear (or timeout if no data)
+    try {
+        await gameRows.first().waitFor({ state: "visible", timeout: 15000 });
+    } catch {
+        // No rows appeared - table may be empty
+    }
+
     const rowCount = await gameRows.count();
 
     if (rowCount === 0) {
-        console.log("⚠ No games found in AI Detection table - skipping test");
-        await modPage.close();
-        await modContext.close();
-        console.log("=== Test Skipped (No Data) ===");
+        log("⚠ No games found in AI Detection table - skipping test");
+        log("=== Test Skipped (No Data) ===");
         return;
     }
 
-    console.log(`Found ${rowCount} games in table ✓`);
+    log(`Found ${rowCount} games in table ✓`);
 
-    // 5. Find a FastSMR cell to test
-    console.log("Looking for FastSMR cell in first row...");
+    // 5. Click the first FastSMR cell (first column = black player)
+    // The first row will always have clickable FastSMR cells
+    log("Looking for first FastSMR cell in first row...");
     const firstRow = gameRows.first();
     await expect(firstRow).toBeVisible();
 
-    // Find all FastSMR cells in the first row
-    const fastSMRCells = firstRow.locator("span[title*='Fast Detection']");
-    const cellCount = await fastSMRCells.count();
-    console.log(`Found ${cellCount} FastSMR cells in first row`);
+    // The first FastSMR cell is always for the black player (first column)
+    const fastSMRCell = firstRow.locator("span[title*='Fast Detection']").first();
+    await expect(fastSMRCell).toBeVisible();
+    log("Found first FastSMR cell (black player) ✓");
 
-    if (cellCount === 0) {
-        console.log("⚠ No FastSMR cells found - skipping test");
-        await modPage.close();
-        await modContext.close();
-        console.log("=== Test Skipped (No FastSMR Data) ===");
-        return;
-    }
-
-    // 6. Find a reportable cell (one with cursor: pointer)
-    let fastSMRCell = fastSMRCells.first();
-    let cursorStyle = await fastSMRCell.evaluate((el) => window.getComputedStyle(el).cursor);
-    console.log(`First cell cursor style: "${cursorStyle}"`);
-
-    if (cursorStyle !== "pointer") {
-        console.log("First cell is not reportable, trying second cell...");
-        if (cellCount > 1) {
-            fastSMRCell = fastSMRCells.nth(1);
-            cursorStyle = await fastSMRCell.evaluate((el) => window.getComputedStyle(el).cursor);
-            console.log(`Second cell cursor style: "${cursorStyle}"`);
-
-            if (cursorStyle !== "pointer") {
-                console.log("⚠ No reportable FastSMR cells found - skipping test");
-                await modPage.close();
-                await modContext.close();
-                console.log("=== Test Skipped (No Reportable Cells) ===");
-                return;
-            }
-        } else {
-            console.log("⚠ Only one FastSMR cell and it's not reportable - skipping test");
-            await modPage.close();
-            await modContext.close();
-            console.log("=== Test Skipped (No Reportable Cells) ===");
-            return;
-        }
-    }
-
-    console.log("Found reportable FastSMR cell ✓");
-
-    // 7. Get the player name from the row to verify the report later
-    const playerLinks = firstRow.locator(".Player");
-    const firstPlayerLink = playerLinks.first();
-    const firstPlayerName = (await firstPlayerLink.textContent()) || "";
-    console.log(`Player name in row: ${firstPlayerName}`);
-
-    // 8. Click the FastSMR cell to create a report
-    console.log("Clicking FastSMR cell to create report...");
+    // 6. Click the FastSMR cell to create a report
+    log("Clicking FastSMR cell to create report...");
     await fastSMRCell.click();
     await modPage.waitForTimeout(1000); // Wait for the report to be submitted
 
@@ -145,60 +109,57 @@ export const aiDetectionFastSMRReportTest = async ({ browser }: { browser: Brows
     const toast = modPage.locator(".toast-container");
     await expect(toast).toBeVisible({ timeout: 5000 });
     const toastText = await toast.textContent();
-    console.log(`Toast notification: ${toastText}`);
+    log(`Toast notification: ${toastText}`);
     expect(toastText).toContain("Reported");
-    console.log("Report submitted successfully ✓");
+    log("Report submitted successfully ✓");
 
     // 9. The toast notification confirms the report was created
-    console.log("Report creation verified via toast notification ✓");
+    log("Report creation verified via toast notification ✓");
 
-    // 10. Navigate to Reports Center and close the report for cleanup
-    console.log("Navigating to Reports Center to close report...");
-    await modPage.goto("/reports-center/ai_use");
-    await modPage.waitForLoadState("networkidle");
+    // 10. Navigate to Reports Center History page to verify the report note
+    log("Navigating to Reports Center History to verify report note...");
+    await modPage.goto("/reports-center/history");
 
-    // Wait for the report to appear - retry up to 5 times with 1 second delays
-    let reportFound = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
+    // Wait for the history table to load by waiting for the table element
+    const historyTable = modPage.locator(".ReportsCenterHistory table");
+    await expect(historyTable).toBeVisible({ timeout: 10000 });
+
+    const firstHistoryRow = historyTable.locator("tbody tr").first();
+    await expect(firstHistoryRow).toBeVisible();
+
+    // Get the Note cell text (last column)
+    const noteCell = firstHistoryRow.locator("td").last();
+    const noteText = await noteCell.textContent();
+    log(`Report note text: ${noteText}`);
+
+    // Verify the note contains the black stone icon (○) since we clicked the first FastSMR cell
+    const hasBlackStone = noteText?.includes("○");
+    expect(hasBlackStone).toBe(true);
+    log("Report note contains correct color icon (○ black stone) ✓");
+
+    // Verify the note mentions AI use (note: text is truncated in history table to 30 chars)
+    // Full note is "from AI-D" but gets truncated to "from A"
+    expect(noteText).toContain("from A");
+    log("Report note contains AI use message ✓");
+
+    // 11. Click the report button to open it and close it for cleanup
+    log("Closing the report for cleanup...");
+    const reportButton = firstHistoryRow.locator("button").first();
+    await reportButton.click();
+
+    // Wait for the report detail view to load by waiting for the Ignore button
+    const ignoreButton = modPage.getByRole("button", { name: /Ignore/i });
+    try {
+        await expect(ignoreButton).toBeVisible({ timeout: 10000 });
+        await ignoreButton.click();
         await modPage.waitForTimeout(1000);
-
-        // Check if a report is displayed (not the "All done!" message)
-        const allDoneMessage = modPage.locator(".no-report-selected");
-        const allDoneVisible = await allDoneMessage.isVisible();
-
-        if (!allDoneVisible) {
-            // A report is displayed
-            reportFound = true;
-            console.log(`Report found on attempt ${attempt + 1} ✓`);
-            break;
-        }
-        console.log(`Attempt ${attempt + 1}: Waiting for report to appear...`);
+        log("Report ignored ✓");
+    } catch {
+        log("⚠ Could not find Ignore button - report may remain open");
     }
 
-    if (reportFound) {
-        // Try to close the report using the Ignore button
-        const ignoreButton = modPage.getByRole("button", { name: /Ignore/i });
-        const ignoreButtonExists = (await ignoreButton.count()) > 0;
-
-        if (ignoreButtonExists) {
-            await ignoreButton.click();
-            await modPage.waitForTimeout(1000);
-            console.log("Report ignored ✓");
-        } else {
-            console.log("⚠ Could not find Ignore button - report may remain open");
-        }
-    } else {
-        console.log("⚠ Report did not appear in Reports Center within 5 seconds");
-    }
-
-    // Clean up
-    await modPage.close();
-    await modContext.close();
-
-    console.log("=== AI Detection FastSMR Report Button Test Complete ===");
-    console.log("✓ Clicking FastSMR cell creates AI use report");
-    console.log("✓ Toast notification confirms report was created");
-    console.log(
-        "Note: Hover behavior must be manually verified (Playwright cannot test React hover)",
-    );
+    log("=== AI Detection FastSMR Report Button Test Complete ===");
+    log("✓ Clicking FastSMR cell creates AI use report");
+    log("✓ Toast notification confirms report was created");
+    log("Note: Hover behavior must be manually verified (Playwright cannot test React hover)");
 };

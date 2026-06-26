@@ -28,6 +28,7 @@ import { rankString } from "@/lib/rank_utils";
 import { browserHistory } from "@/lib/ogsHistory";
 import { alert } from "@/lib/swal_config";
 import { GobanConfig, GobanEnginePlayerEntry, GobanEngineRules } from "goban";
+import "./GameInfoModal.css";
 
 interface Events {}
 
@@ -396,6 +397,17 @@ export class GameInfoModal extends Modal<Events, GameInfoModalProperties, GameIn
                         </dd>
                         <dt>{_("Time Control")}</dt>
                         <dd>{time_control_description}</dd>
+                        {config.disable_vacation && (
+                            <>
+                                <dt>{_("Vacation")}</dt>
+                                <dd className="disable-vacation-warning">
+                                    <i className="fa fa-exclamation-triangle"></i>{" "}
+                                    {_(
+                                        "Vacation is disabled for this game. The clock will not pause for vacation.",
+                                    )}
+                                </dd>
+                            </>
+                        )}
                     </dl>
                 </div>
                 <div className="buttons">

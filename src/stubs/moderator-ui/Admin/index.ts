@@ -6,3 +6,7 @@ export * from "./Admin";
 export * from "./MerchantLog";
 export * from "./FlaggedGames";
 export * from "./OnlineLeaguesAdmin";
+export * from "./AnnulmentCriteriaSettings";
+export * from "./AIReviewStatus";
+export * from "./AIReviewRequestStats";
+export * from "./WhatsNewAdmin";

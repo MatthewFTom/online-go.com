@@ -28,7 +28,7 @@ import { socket } from "@/lib/sockets";
 import * as data from "@/lib/data";
 import { close_all_popovers } from "@/lib/popover";
 import { Flag } from "@/components/Flag";
-import { ban, shadowban, remove_shadowban, remove_ban } from "@/views/Moderator/ban_functions";
+import { ban, shadowban, remove_shadowban, remove_ban } from "@moderator-ui/Moderator";
 import { challenge } from "@/components/ChallengeModal";
 import { getPrivateChat } from "@/components/PrivateChat";
 import { openBlockPlayerControls } from "@/components/BlockPlayer";
@@ -40,9 +40,13 @@ import { openPlayerNotesModal } from "@/components/PlayerNotesModal";
 import { alert } from "@/lib/swal_config";
 import { PlayerCacheEntry } from "@/lib/player_cache";
 import { openReport } from "@/components/Report";
+import { MODERATOR_POWERS } from "@/lib/moderation";
+import { PlayerTagInput } from "@moderator-ui/PlayerTagInput";
+import "./PlayerDetails.css";
 
 interface PlayerDetailsProperties {
     playerId: number;
+    gameId?: number; // When provided, shows tag input for moderators
     chatId?: string;
     gameChatId?: string;
     reviewChatId?: string;
@@ -168,7 +172,10 @@ export class PlayerDetails extends React.PureComponent<
         this.close_all_modals_and_popovers();
     };
     report = () => {
-        openReport({ reported_user_id: this.props.playerId });
+        openReport({
+            reported_user_id: this.props.playerId,
+            ...(this.props.gameId !== undefined && { reported_game_id: this.props.gameId }),
+        });
         this.close_all_modals_and_popovers();
     };
     block = (ev: React.MouseEvent<HTMLButtonElement>) => {
@@ -210,6 +217,16 @@ export class PlayerDetails extends React.PureComponent<
     editPlayerNotes = () => {
         this.close_all_modals_and_popovers();
         openPlayerNotesModal(this.props.playerId);
+    };
+
+    checkAI = (ev: React.MouseEvent<HTMLButtonElement>) => {
+        this.close_all_modals_and_popovers();
+        const url = `/moderator/fair-play-search?mode=basic&player=${this.props.playerId}`;
+        if (shouldOpenNewTab(ev)) {
+            window.open(url, "_blank");
+        } else {
+            browserHistory.push(url);
+        }
     };
 
     addFriend = () => {
@@ -288,7 +305,7 @@ export class PlayerDetails extends React.PureComponent<
             : _("Add notes");
 
         return (
-            <div className="PlayerDetails">
+            <div className="PlayerDetails" data-ready={this.state.resolved}>
                 <div className="details">
                     <div
                         className="icon"
@@ -416,6 +433,12 @@ export class PlayerDetails extends React.PureComponent<
                             <i className="fa fa-times-circle" />
                             {pgettext("Remove all chat lines from this user", "Remove all chats")}
                         </button>
+                        {((user.is_superuser && this.props.playerId > 0) || null) && (
+                            <button className="xs no-shadow" onClick={this.openSupporterPage}>
+                                <i className="fa fa-star" />
+                                Supporter Page
+                            </button>
+                        )}
                     </div>
                 )}
                 {((user.is_moderator && this.props.playerId > 0) || null) && (
@@ -442,14 +465,23 @@ export class PlayerDetails extends React.PureComponent<
                         </button>
                     </div>
                 )}
-                {((user.is_superuser && this.props.playerId > 0) || null) && (
+                {(((user.is_moderator ||
+                    (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) &&
+                    this.props.playerId > 0) ||
+                    null) && (
                     <div className="actions">
-                        <button className="xs no-shadow" onClick={this.openSupporterPage}>
-                            <i className="fa fa-star" />
-                            Supporter Page
+                        <button className="xs no-shadow" onClick={this.checkAI}>
+                            <i className="fa fa-search" />
+                            {_("Check AI")}
                         </button>
                     </div>
                 )}
+                {(user.is_moderator ||
+                    (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) &&
+                    this.props.gameId &&
+                    this.props.playerId > 0 && (
+                        <PlayerTagInput playerId={this.props.playerId} gameId={this.props.gameId} />
+                    )}
             </div>
         );
     }

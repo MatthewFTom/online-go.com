@@ -52,6 +52,8 @@ import { HelpSettings } from "./HelpSettings";
 import { Supporter } from "@/views/Supporter";
 import { GoTVPreferences } from "./GoTVPreferences";
 import { ThemePreferences } from "./ThemePreferences";
+import { HomeScreenPreferences } from "./HomeScreenPreferences";
+import "./Settings.css";
 
 export function Settings(): React.ReactElement {
     const { category } = useParams();
@@ -68,6 +70,10 @@ export function Settings(): React.ReactElement {
     const { ref: accountSettingsButton } = registerTargetItem("account-settings-button"); // cleared on AccountSettings page
 
     React.useEffect(refresh, []);
+
+    React.useEffect(() => {
+        window.document.title = _("Settings");
+    }, []);
 
     function select(s: string): void {
         data.set("settings.page-selected", s);
@@ -111,6 +117,7 @@ export function Settings(): React.ReactElement {
         { key: "game", label: _("Game Preferences") },
         { key: "theme", label: _("Themes & Visuals") },
         { key: "chat", label: _("Chat Preferences") },
+        { key: "home", label: _("Home Preferences") },
         { key: "gotv", label: interpolate(_("%s Preferences"), ["GoTV"]) },
         {
             key: "supporter",
@@ -149,6 +156,9 @@ export function Settings(): React.ReactElement {
     switch (selected) {
         case "general":
             SelectedPage = GeneralPreferences;
+            break;
+        case "home":
+            SelectedPage = HomeScreenPreferences;
             break;
         case "sound":
             SelectedPage = SoundPreferences;

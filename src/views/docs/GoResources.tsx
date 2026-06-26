@@ -22,6 +22,7 @@ import { pgettext, _, getLanguageFlag, interpolate } from "@/lib/translate";
 import { Flag } from "@/components/Flag";
 import * as data from "@/lib/data";
 import { Markdown } from "@/components/Markdown";
+import "./GoResources.css";
 
 function shuffleArray(array: React.ReactElement[]) {
     for (let i = array.length - 1; i >= 0; i--) {
@@ -239,6 +240,34 @@ export function GoResources(): React.ReactElement {
                             <dd key={idx}>{elt}</dd>
                         ))}
                     </dl>
+
+                    <dl>
+                        <dt>{_("Journals")}</dt>
+
+                        {scramble(
+                            <Book
+                                countries={[en]}
+                                title="European Go Journal"
+                                href="https://eurogojournal.com/"
+                                authors={["Artem Kachanovskyi (3p)"]}
+                                editions={[
+                                    {
+                                        title: "English",
+                                        country: en,
+                                        href: "https://eurogojournal.com/editions/",
+                                    },
+                                    {
+                                        title: "Español",
+                                        country: es,
+                                        href: "https://laesquinago.github.io/",
+                                    },
+                                ]}
+                            />,
+                        ).map((elt, idx) => (
+                            <dd key={idx}>{elt}</dd>
+                        ))}
+                    </dl>
+
                     <dl>
                         <dt>{_("Kifu Sheets")}</dt>
                         {scramble(
@@ -387,11 +416,6 @@ export function GoResources(): React.ReactElement {
                                 countries={[cn]}
                                 title="101weiqi.com"
                                 href="https://www.101weiqi.com/"
-                            />,
-                            <BasicResource
-                                countries={[en]}
-                                title="Sahwal.com"
-                                href="http://sahwal.com"
                             />,
                             <BasicResource
                                 countries={[en]}

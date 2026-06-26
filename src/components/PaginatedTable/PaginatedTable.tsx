@@ -20,6 +20,7 @@ import { _ } from "@/lib/translate";
 import { post, get } from "@/lib/requests";
 import * as data from "@/lib/data";
 import { UIPush } from "../UIPush";
+import "./PaginatedTable.css";
 
 interface PaginatedTableColumnProperties<EntryT> {
     cellProps?: any;
@@ -126,10 +127,18 @@ function PaginatedTableImpl<RawEntryT = any, GroomedEntryT = RawEntryT>(
         if (!force && last.length && softEquals(last, cur)) {
             return;
         }
+        const last_filter = last[3];
         last_loaded.current = cur;
 
         if (loading) {
             load_again.current = true;
+            return;
+        }
+
+        if (last_filter && !softEquals(last_filter, filter)) {
+            setPage(1);
+            load_again.current = true;
+            setLoadAgainRefresh(load_again_refresh + 1);
             return;
         }
 
@@ -173,9 +182,6 @@ function PaginatedTableImpl<RawEntryT = any, GroomedEntryT = RawEntryT>(
             })
             .catch((err) => {
                 console.error(err);
-                if (err.status === 404) {
-                    setPage(1);
-                }
                 setLoading(false);
                 if (load_again.current) {
                     load_again.current = false;

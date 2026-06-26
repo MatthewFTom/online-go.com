@@ -19,7 +19,7 @@ import * as React from "react";
 import { useLocation, useParams } from "react-router-dom";
 import { _, pgettext, moment } from "@/lib/translate";
 import { get, put } from "@/lib/requests";
-import { parse } from "query-string";
+import queryString from "query-string";
 import * as data from "@/lib/data";
 
 import * as preferences from "@/lib/preferences";
@@ -55,6 +55,7 @@ import { ActivityCard } from "./ActivityCard";
 import { ActiveDroppedGameList } from "@/components/ActiveDroppedGameList";
 import { NewUserRankChooser } from "@/components/NewUserRankChooser";
 import { usePreference } from "@/lib/preferences";
+import "./User.css";
 
 type RatingsSpeed = "overall" | "blitz" | "live" | "correspondence";
 type RatingsSize = 0 | 9 | 13 | 19;
@@ -65,7 +66,7 @@ export function User(props: { user_id?: number }): React.ReactElement {
         props.user_id ||
         ("user_id" in params ? parseInt(params.user_id as string) : data.get("user").id);
     const location = useLocation();
-    const show_mod_log = parse(location.search)["show_mod_log"] === "1";
+    const show_mod_log = queryString.parse(location.search)["show_mod_log"] === "1";
 
     const [user, setUser] = React.useState<rest_api.FullPlayerDetail["user"]>();
     const [editing, setEditing] = React.useState(/edit/.test(location.hash));
@@ -360,7 +361,7 @@ export function User(props: { user_id?: number }): React.ReactElement {
                             editing={editing}
                             openModerateUser={openModerateUser}
                             onEdit={() => setEditing(true)}
-                            onSave={saveEditChanges.bind(this)}
+                            onSave={saveEditChanges}
                         />
 
                         {(!preferences.get("hide-ranks") || temporary_show_ratings) &&
@@ -533,11 +534,12 @@ export function User(props: { user_id?: number }): React.ReactElement {
                         <ActiveDroppedGameList
                             games={active_games}
                             user={user}
+                            showCount={true}
                         ></ActiveDroppedGameList>
                     )}
 
                     <div className="row">
-                        <GameHistoryTable user_id={user.id} />
+                        <GameHistoryTable user_id={user.id} is_bot={user.is_bot} />
                     </div>
 
                     <div className="row">

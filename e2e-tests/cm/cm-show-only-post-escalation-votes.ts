@@ -26,11 +26,14 @@
  * - E2E_CM_SOPEV_ESCALATOR : CM who escalates the report
  */
 
-import { Browser, TestInfo } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo } from "@playwright/test";
 
 import {
-    assertIncidentReportIndicatorActive,
+    captureReportNumber,
     goToUsersFinishedGame,
+    navigateToReport,
     newTestUsername,
     prepareNewUser,
     reportUser,
@@ -39,19 +42,21 @@ import {
 
 import { expectOGSClickableByName } from "@helpers/matchers";
 import { expect } from "@playwright/test";
-import { withIncidentIndicatorLock } from "@helpers/report-utils";
+import { withReportCountTracking } from "@helpers/report-utils";
 
 export const cmShowOnlyPostEscalationVotesTest = async (
-    { browser }: { browser: Browser },
+    {
+        createContext,
+    }: { createContext: (options?: CreateContextOptions) => Promise<BrowserContext> },
     testInfo: TestInfo,
 ) => {
-    await withIncidentIndicatorLock(testInfo, async () => {
-        const { userPage: reporterPage } = await prepareNewUser(
-            browser,
-            newTestUsername("CmSOPEVRep"), // cspell:disable-line
-            "test",
-        );
+    const { userPage: reporterPage } = await prepareNewUser(
+        createContext,
+        newTestUsername("CmSOPEVRep"), // cspell:disable-line
+        "test",
+    );
 
+    await withReportCountTracking(reporterPage, testInfo, async (tracker) => {
         // Report someone for escaping
         await goToUsersFinishedGame(reporterPage, "E2E_CM_SOPEV_REPORTED", "E2E CM SOPEV Game");
 
@@ -62,21 +67,23 @@ export const cmShowOnlyPostEscalationVotesTest = async (
             "E2E test - SOPEV reporting score cheating!",
         );
 
+        // Verify reporter's count increased by 1
+        await tracker.assertCountIncreasedBy(reporterPage, 1);
+
+        // Capture the report number from the reporter's "My Own Reports" page
+        const reportNumber = await captureReportNumber(reporterPage);
+
         // Now put a pre-escalation vote on the report
 
         const { seededCMPage: initialVoterPage } = await setupSeededCM(
-            browser,
+            createContext,
             "E2E_CM_SOPEV_INITIAL_VOTER",
         );
 
-        let indicator = await assertIncidentReportIndicatorActive(initialVoterPage, 1);
+        // Navigate directly to the report using the captured report number
+        await navigateToReport(initialVoterPage, reportNumber);
 
-        await indicator.click();
-
-        await expect(
-            initialVoterPage.getByRole("heading", { name: "Reports Center" }),
-        ).toBeVisible();
-
+        // Verify we can see the report with the message
         await expect(
             initialVoterPage.getByText("E2E test - SOPEV reporting score cheating!"),
         ).toBeVisible();
@@ -89,16 +96,14 @@ export const cmShowOnlyPostEscalationVotesTest = async (
 
         // Now escalate the report
         const { seededCMPage: escalatorPage } = await setupSeededCM(
-            browser,
+            createContext,
             "E2E_CM_SOPEV_ESCALATOR",
         );
 
-        indicator = await assertIncidentReportIndicatorActive(escalatorPage, 1);
+        // Navigate directly to the report using the captured report number
+        await navigateToReport(escalatorPage, reportNumber);
 
-        await indicator.click();
-
-        await expect(escalatorPage.getByRole("heading", { name: "Reports Center" })).toBeVisible();
-
+        // Verify we can see the report with the message
         await expect(
             escalatorPage.getByText("E2E test - SOPEV reporting score cheating!"),
         ).toBeVisible();
@@ -110,6 +115,10 @@ export const cmShowOnlyPostEscalationVotesTest = async (
         voteButton = await expectOGSClickableByName(escalatorPage, /Vote$/);
 
         await voteButton.click();
+
+        // After voting, the system navigates to the next report
+        // Navigate back to our specific report to verify escalation
+        await navigateToReport(escalatorPage, reportNumber);
 
         await expect(
             escalatorPage.getByText("Escalated due to VotingOutcome.VOTED_ESCALATION"),
@@ -138,5 +147,8 @@ export const cmShowOnlyPostEscalationVotesTest = async (
 
         const cancelButton = await expectOGSClickableByName(reporterPage, /Cancel$/);
         await cancelButton.click();
+
+        // After canceling the report, the count should return to initial
+        await tracker.assertCountReturnedToInitial(reporterPage);
     });
 };

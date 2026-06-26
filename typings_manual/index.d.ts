@@ -1,4 +1,15 @@
 /// <reference path="js-noise.d.ts" />
+/// <reference types="vite/client" />
+
+// Vite worker URL import: `import url from './worker?worker&url'` returns
+// the URL string of the separately-bundled worker script.
+declare module "*?worker&url" {
+    const src: string;
+    export default src;
+}
+
+// Compile-time constant injected by Vite from goban-socket-worker-version file
+declare const GOBAN_SOCKET_WORKER_VERSION: string;
 
 interface Window {
     global_goban?: import("goban").GobanRenderer | null;
@@ -16,7 +27,7 @@ interface Window {
     ogs_locales: Record<string, Record<string, Array<string>>>;
     ogs_countries: Record<string, Record<string, string>>;
 
-    // Set by gulp
+    // Set by vite dev server
     websocket_host: string;
 
     // set in main.tsx
@@ -53,7 +64,6 @@ interface Window {
     GobanEngine: unknown; // configure-goban.ts
     skew_clock: Function; // misc.ts
     notification_manager?: unknown; // NotificationManager.tsx
-    test_sentry: Function; // ErrorBoundary.tsx
     proxy?: unknown; // ChatUserList.tsx
 
     safari?: unknown;

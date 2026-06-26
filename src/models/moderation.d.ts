@@ -76,12 +76,18 @@ declare namespace rest_api {
             | "final_warning_escaping"
             | "final_warning_stalling"
             | "final_warning_score_cheating"
+            | "final_warning_thrown_game"
             | "final_warning_escaping_and_annul"
             | "final_warning_stalling_and_annul"
             | "final_warning_score_cheating_and_annul"
+            | "final_warning_thrown_game_and_annul"
             | "warn_duplicate_reporter"
             | "suspend_user"
             | "suspend_user_and_annul"
+            | "suspend_ai_user"
+            | "warn_ai_user"
+            | "first_warn_ai_user"
+            | "cancel_ai_ticket"
             | "escalate"
             | "definitely_ai"
             | "likely_ai"
@@ -89,7 +95,18 @@ declare namespace rest_api {
             | "human_like"
             | "assess_ai_play"
             | "no_ai_use_evident"
-            | "no_ai_use_bad_report";
+            | "no_ai_use_bad_report"
+            | "annul_sandbagged"
+            | "annul_sandbagged_games"
+            | "warn_sandbagger"
+            | "no_sandbagging"
+            | "mod_investigate_sandbagging"
+            | "annul_thrown_game"
+            | "annul_thrown_games"
+            | "warn_thrown_game"
+            | "no_thrown_game"
+            | "informal_warn_escaper"
+            | "informal_warn_escaper_and_annul";
 
         // Regrettably, there's another definition of Vote in goban ServerToClient.ts
         // I wonder how we unify the rest_api and goban interfaces...
@@ -149,6 +166,15 @@ declare namespace rest_api {
             dissenter_note: string;
             voter_notes: VoterNote[];
             simul: boolean;
+            has_warning_type_mapping: boolean | null; // whether this report type has warning message mappings
+            time_since_last_warning: number | null; // seconds since last warning of this type
+            games_since_last_warning: number | null; // games played since last warning of this type
+            escape_rate: number | null;
+            escapes_in_window: number | null;
+            games_in_window: number | null;
+            is_escaping_too_much: boolean | null;
+            has_prior_formal_warning: boolean | null;
+            has_prior_final_warning: boolean | null;
         }
     }
 }

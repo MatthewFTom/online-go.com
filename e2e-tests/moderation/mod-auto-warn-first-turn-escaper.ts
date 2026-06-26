@@ -17,7 +17,9 @@
 
 // (No seeded data in use)
 
-import { Browser } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo } from "@playwright/test";
 
 import { newTestUsername, prepareNewUser } from "@helpers/user-utils";
 
@@ -27,16 +29,25 @@ import {
     defaultChallengeSettings,
 } from "@helpers/challenge-utils";
 import { clickInTheMiddle } from "@helpers/game-utils";
+import { log } from "@helpers/logger";
 
-export const modWarnFirstTurnEscapersTest = async ({ browser }: { browser: Browser }) => {
+export const modWarnFirstTurnEscapersTest = async (
+    {
+        createContext,
+    }: {
+        createContext: (options?: CreateContextOptions) => Promise<BrowserContext>;
+    },
+    testInfo: TestInfo,
+) => {
+    testInfo.setTimeout(120 * 1000); // 2 minutes - waits ~60s for player timeout (45s + 10s)
     const { userPage: challengerPage } = await prepareNewUser(
-        browser,
+        createContext,
         newTestUsername("CmFTEChall"), // cspell:disable-line
         "test",
     );
 
     const escaperUsername = newTestUsername("CmFTEEscaper"); // cspell:disable-line
-    const { userPage: escaperPage } = await prepareNewUser(browser, escaperUsername, "test");
+    const { userPage: escaperPage } = await prepareNewUser(createContext, escaperUsername, "test");
 
     // Challenger challenges the escaper
     await createDirectChallenge(challengerPage, escaperUsername, {
@@ -64,7 +75,7 @@ export const modWarnFirstTurnEscapersTest = async ({ browser }: { browser: Brows
     // Now challenger is waiting for escaper ... eventually escaper times out
     // and challenger gets the ack that we are looking for
 
-    console.log("cmWarnFirstTurnEscaper waiting escaper timeout (about a minute)...");
+    log("cmWarnFirstTurnEscaper waiting escaper timeout (about a minute)...");
     await challengerPage
         .locator(
             '.AccountWarningAck .canned-message:has-text("We\'ve noticed that the other player left game")',

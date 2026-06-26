@@ -180,7 +180,7 @@ Follow these critical rules:
 
 ```typescript
 // For new test users:
-const username = newTestUsername("RoleDesc"); // Max 21 chars!
+const username = newTestUsername("RoleDesc"); // Max 20 chars!
 const { userPage, userContext } = await prepareNewUser(browser, username, "test");
 
 // For seeded full moderators (E2E_MODERATOR):
@@ -276,10 +276,10 @@ These are mandatory requirements:
 
     - `expectOGSClickableByName()` for ALL buttons/links
     - `prepareNewUser()` for creating test users
-    - `newTestUsername()` for unique usernames (max 21 characters!)
+    - `newTestUsername()` for unique usernames (max 20 characters!)
     - `generateUniqueTestIPv6()` for unique IP addresses
 
-4. **Username Constraints** - The argument to `newTestUsername()` MUST be less than 21 characters (8 chars are used for uniquification)
+4. **Username Constraints** - The argument to `newTestUsername()` MUST be 20 characters or less (10 chars are used for uniquification: e2e prefix, underscore, timestamp, worker ID)
 
 5. **Avoid Direct API Calls** - Drive the system as a user does through the UI
 
@@ -295,7 +295,7 @@ These are mandatory requirements:
 
 8. **English Testing** - We test in English only; no need to worry about `pgettext`
 
-9. **Wait for State** - Use `waitForLoadState("networkidle")` and appropriate timeouts
+9. **Wait for Specific Elements** - Wait for specific UI elements to be visible, not `waitForLoadState("networkidle")` which is unreliable. Example: `await expect(page.locator(".Game")).toBeVisible({ timeout: 15000 })`
 
 ### Step 6: Register the Test
 
@@ -324,7 +324,7 @@ Fix any errors before proceeding.
 
 ### Step 8: Run the Test
 
-**IMPORTANT**: You must test your test before submitting it. This ensures it works correctly and doesn't break the test suite.
+**IMPORTANT**: You must test your test before considering the task complete. This ensures it works correctly and doesn't break the test suite.
 
 #### Prerequisites
 
@@ -394,7 +394,7 @@ yarn test:e2e:debug e2e-tests/moderation/mod-system-pm-button.ts
 -   Ensure dev server is running (`yarn dev`)
 -   Check network connectivity
 -   Increase timeout values if needed
--   Verify page navigation is working (`waitForLoadState("networkidle")`)
+-   Verify page navigation by waiting for specific elements to be visible
 
 ---
 
@@ -530,10 +530,9 @@ await page.waitForTimeout(1000);
 
 // Reload to get fresh state
 await page.reload();
-await page.waitForLoadState("networkidle");
 
-// Verify new state
-await expect(page.getByText(/Expected Result/)).toBeVisible();
+// Verify new state - wait for specific element instead of networkidle
+await expect(page.getByText(/Expected Result/)).toBeVisible({ timeout: 15000 });
 ```
 
 ## Troubleshooting
@@ -546,7 +545,7 @@ await expect(page.getByText(/Expected Result/)).toBeVisible();
 
 1. Check if message/input is required first (buttons often disabled without input)
 2. Verify you're using the exact button text (check the component code)
-3. Ensure page has finished loading (`waitForLoadState("networkidle")`)
+3. Wait for the specific element you need to be visible (avoid `networkidle` - it's unreliable)
 4. Check if button is hidden by CSS classes based on state
 
 ### Wrong Selector

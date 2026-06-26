@@ -36,22 +36,25 @@ import { TournamentIndicator } from "@/components/Announcements";
 import { FriendIndicator } from "@/components/FriendList";
 import { ChatIndicator } from "@/components/Chat";
 import { GoTVIndicator } from "@/views/GoTV";
+import { get } from "@/lib/requests";
 import { Menu, MenuContext } from "./Menu";
 
 import { logout } from "@/lib/auth";
 import { useUser, useData } from "@/lib/hooks";
 import { OmniSearch } from "./OmniSearch";
+import { Hamburger } from "./Hamburger";
 import { forwardRef, useId, useState } from "react";
 import { MODERATOR_POWERS } from "@/lib/moderation";
 import { openDemoBoardModal } from "../DemoBoardModal";
+import "./NavBar.css";
 
 function setTheme(theme: string) {
     data.set("theme", theme, data.Replication.REMOTE_OVERWRITES_LOCAL);
 }
 
 function toggleTheme() {
-    const currentTheme = document.body.classList.contains("light") ? "light" : "dark";
-    if (currentTheme === "dark") {
+    const currentTheme = document.documentElement.dataset.theme;
+    if (currentTheme === "dark" || currentTheme === "accessible") {
         setTheme("light");
     } else {
         setTheme("dark");
@@ -75,6 +78,23 @@ export function NavBar(): React.ReactElement {
     const search_input = React.useRef<HTMLInputElement>(null);
     const [force_nav_close, setForceNavClose] = React.useState(false);
     const [banned_user_id] = useData("appeals.banned_user_id");
+    const [kibitzShowInNav, setKibitzShowInNav] = React.useState<boolean>(false);
+
+    React.useEffect(() => {
+        let cancelled = false;
+        get("kibitz/nav-config")
+            .then((res: { show_in_nav?: boolean }) => {
+                if (!cancelled) {
+                    setKibitzShowInNav(Boolean(res?.show_in_nav));
+                }
+            })
+            .catch(() => {
+                // Network blip / endpoint missing — leave the link hidden.
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     const { registerTargetItem } = React.useContext(DynamicHelp.Api);
 
@@ -162,16 +182,7 @@ export function NavBar(): React.ReactElement {
 
                 {banned_user_id && show_appeal_box ? <BanIndicator /> : null}
 
-                <span className="hamburger">
-                    {hamburger_expanded ? (
-                        <i className="fa fa-times" onClick={toggleHamburgerExpanded} />
-                    ) : (
-                        <i className="fa fa-bars" onClick={toggleHamburgerExpanded} />
-                    )}
-                    <Link to="/">
-                        <span className="ogs-nav-logo" />
-                    </Link>
-                </span>
+                <Hamburger onClick={toggleHamburgerExpanded} open={hamburger_expanded} />
 
                 <nav className="left" aria-label={_("Main Navigation")}>
                     <ul>
@@ -241,6 +252,13 @@ export function NavBar(): React.ReactElement {
                                 to="/observe-games"
                                 icon={<i className="fa fa-eye" />}
                             />
+                            {kibitzShowInNav && (
+                                <MenuLink
+                                    title={_("Kibitz")}
+                                    to="/kibitz"
+                                    icon={<i className="ogs-kibitz" />}
+                                />
+                            )}
                             <MenuLink title={"GoTV"} to="/gotv" icon={<i className="fa fa-tv" />} />
                         </Menu>
                         <Menu
@@ -267,9 +285,22 @@ export function NavBar(): React.ReactElement {
                                 icon={<i className="fa fa-users" />}
                             />
                             <MenuLink
+                                title={_("What's New")}
+                                to="/whats-new"
+                                icon={<i className="fa fa-bullhorn" />}
+                            />
+                            <MenuLink
                                 title={_("Support OGS")}
                                 to="/supporter"
                                 icon={<i className="fa fa-star" />}
+                            />
+                            <MenuLink
+                                title={pgettext(
+                                    "Request an OGS prize sponsorship for a tournament",
+                                    "Sponsorship Request",
+                                )}
+                                to="/sponsorship-request"
+                                icon={<i className="fa fa-trophy" />}
                             />
                             <MenuLink
                                 title={_("About")}
@@ -355,8 +386,40 @@ export function NavBar(): React.ReactElement {
                                 (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) && (
                                 <MenuLink
                                     title={_("AI Detection")}
-                                    to="/moderator/ai-detection"
+                                    to="/moderator/fair-play-search?mode=basic"
                                     icon={<i className="fa fa-search" />}
+                                />
+                            )}
+                            {(user.is_moderator ||
+                                (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) && (
+                                <MenuLink
+                                    title={_("Recently Blocked")}
+                                    to="/moderator/recently-blocked"
+                                    icon={<i className="fa fa-ban" />}
+                                />
+                            )}
+                            {(user.is_moderator ||
+                                (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) && (
+                                <MenuLink
+                                    title={_("Fair Play System")}
+                                    to="/moderator/fair-play"
+                                    icon={<i className="fa fa-code" />}
+                                />
+                            )}
+                            {(user.is_moderator ||
+                                (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) && (
+                                <MenuLink
+                                    title={_("Fair Play Search")}
+                                    to="/moderator/fair-play-search"
+                                    icon={<i className="fa fa-search" />}
+                                />
+                            )}
+                            {(user.is_moderator ||
+                                (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0) && (
+                                <MenuLink
+                                    title={_("Fair Play Actions")}
+                                    to="/moderator/fair-play-actions"
+                                    icon={<i className="fa fa-gavel" />}
                                 />
                             )}
                             {user.is_moderator && (

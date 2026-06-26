@@ -35,8 +35,8 @@ export function GamePreferences(): React.ReactElement {
     const [dock_delay, _setDockDelay]: [number, (x: number) => void] = React.useState(
         preferences.get("dock-delay"),
     );
-    const [ai_review_enabled, _setAiReviewEnabled] = usePreference("ai-review-enabled");
-    const [variations_in_chat, _setVariationsInChat] = usePreference("variations-in-chat-enabled");
+    const [ai_review_enabled, setAiReviewEnabled] = usePreference("ai-review-enabled");
+    const [variations_in_chat, setVariationsInChat] = usePreference("variations-in-chat-enabled");
     const [_live_submit_mode, _setLiveSubmitMode]: [string, (x: string) => void] = React.useState(
         getSubmitMode("live"),
     );
@@ -46,6 +46,9 @@ export function GamePreferences(): React.ReactElement {
     const [chat_mode, _setChatMode] = usePreference("chat-mode");
     const [autofocus_submit_button, setAutoFocusSubmitButton] =
         usePreference("autofocus-submit-button");
+    const [keyboard_coordinates, setKeyboardCoordinates] = usePreference(
+        "accessibility.keyboard-coordinate-input",
+    );
 
     const [auto_advance, setAutoAdvance] = usePreference("auto-advance-after-submit");
     const [always_disable_analysis, setAlwaysDisableAnalysis] =
@@ -56,7 +59,7 @@ export function GamePreferences(): React.ReactElement {
         preferences.get("autoplay-delay") / 1000,
     );
     const [variation_move_count, _setVariationMoveCount] = usePreference("variation-move-count");
-    const [zen_mode_by_default, _setZenModeByDefault] = usePreference("start-in-zen-mode");
+    const [zen_mode_by_default, setZenModeByDefault] = usePreference("start-in-zen-mode");
     const [scroll_to_navigate, setScrollToNavigate] = usePreference("scroll-to-navigate");
 
     function setDockDelay(ev: React.ChangeEvent<HTMLInputElement>) {
@@ -65,13 +68,13 @@ export function GamePreferences(): React.ReactElement {
         _setDockDelay(new_delay);
     }
     function toggleAIReview(checked: boolean) {
-        _setAiReviewEnabled(!checked);
+        setAiReviewEnabled(!checked);
     }
     function toggleVariationsInChat(checked: boolean) {
-        _setVariationsInChat(checked);
+        setVariationsInChat(checked);
     }
     function toggleZenMode(checked: boolean) {
-        _setZenModeByDefault(checked);
+        setZenModeByDefault(checked);
     }
 
     function getSubmitMode(speed: string) {
@@ -178,6 +181,15 @@ export function GamePreferences(): React.ReactElement {
 
             <PreferenceLine title={_("Autofocus submit button")}>
                 <Toggle checked={autofocus_submit_button} onChange={setAutoFocusSubmitButton} />
+            </PreferenceLine>
+
+            <PreferenceLine
+                title={_("Enable keyboard coordinate input")}
+                description={_(
+                    "Show an input field to place stones by typing coordinates (e.g., D4, Q16)",
+                )}
+            >
+                <Toggle checked={keyboard_coordinates} onChange={setKeyboardCoordinates} />
             </PreferenceLine>
 
             <PreferenceLine title={_("Auto-advance to next game after making a move")}>

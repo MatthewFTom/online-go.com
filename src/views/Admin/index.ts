@@ -15,4 +15,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-export { Admin, MerchantLog, FlaggedGames, OnlineLeaguesAdmin } from "@moderator-ui/Admin";
+export {
+    Admin,
+    MerchantLog,
+    FlaggedGames,
+    OnlineLeaguesAdmin,
+    AnnulmentCriteriaSettings,
+    AIReviewStatus,
+    AIReviewRequestStats,
+    WhatsNewAdmin,
+} from "@moderator-ui/Admin";

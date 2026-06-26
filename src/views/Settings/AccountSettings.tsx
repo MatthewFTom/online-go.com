@@ -33,6 +33,7 @@ import { toast } from "@/lib/toast";
 import { InfoBall } from "@/components/InfoBall";
 import { pgettext, sorted_locale_countries, _ } from "@/lib/translate";
 import { Link } from "react-router-dom";
+import "./AccountSettings.css";
 
 export function AccountSettings(props: SettingGroupPageProps): React.ReactElement {
     const user = useUser();
@@ -373,7 +374,7 @@ export function AccountSettings(props: SettingGroupPageProps): React.ReactElemen
                                 onChange={(ev) => setEmail(ev.target.value)}
                             />
                             <div style={{ marginTop: "0.5rem" }}>
-                                <i>We will never sell your email address.</i>
+                                <i>{_("We will never sell your email address.")}</i>
                             </div>
 
                             {email && !email_changed && !email_validated && (

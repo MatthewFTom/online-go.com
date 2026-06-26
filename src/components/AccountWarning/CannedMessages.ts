@@ -85,6 +85,28 @@ Thank you for your report, '{{reported}}' has been given a formal warning about 
             ),
             { reported },
         ),
+    informal_warn_escaper: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Informal warning message to a user - a gentle reminder, not a formal warning",
+                `
+Just a friendly reminder: please remember to finish your games or resign when you want to stop playing.
+
+Leaving games without concluding them (like game #{{game_id}}) is frustrating for your opponents, who have to wait for your clock to run out.
+
+Thank you for helping keep OGS enjoyable for everyone.`,
+            ),
+            { game_id },
+        ),
+    ack_informal_warn_escaper: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported an escaper that received an informal warning",
+                `
+Thank you for your report about '{{reported}}'. We've sent them a friendly reminder about finishing their games properly.`,
+            ),
+            { reported },
+        ),
     no_escaping_evident: (reported) =>
         interpolate(
             llm_pgettext(
@@ -128,7 +150,7 @@ We've noticed that you joined game #{{game_id}} but didn't make any moves.
 
 It's possible you didn't notice this game start - we understand that.
 
-If you can be alert for this, so that other users are not left waiting and wondering, that would be great..
+Please avoid this if possible, so that other users are not left waiting and wondering.
 
 Thank you for helping keep OGS enjoyable for everyone. We appreciate it.
 `,
@@ -357,7 +379,7 @@ Any further detection of AI use will result in suspension of your account.`,
             llm_pgettext(
                 "Acknowledgement message to a user",
                 `
-Thank you for bringing the possible instance of AI use in Game #{{game_id}} to our attention. We looked into the game and couldn't see evidence of AI use.   
+Thank you for bringing the possible instance of AI use in Game #{{game_id}} to our attention. We looked into the game and couldn't see evidence of AI use.
 
 It may be that you need to provide more explanation - you are welcome to raise a new report if that is the case.
 
@@ -370,13 +392,68 @@ Thank you for helping keep OGS enjoyable for everyone. We appreciate it.`,
             llm_pgettext(
                 "Acknowledgement and education message to a user",
                 `
-    Thank you for bringing the possible instance of AI use in Game #{{game_id}} to our attention. We looked into the game and couldn't see evidence of AI use.   
-    
+    Thank you for bringing the possible instance of AI use in Game #{{game_id}} to our attention. We looked into the game and couldn't see evidence of AI use.
+
     Your report did not contain any real evidence of AI use - we'd prefer if you could provide more details, to help us find the problem quickly.
-    
+
     If you have a good reason to suspect AI use, please take some time to provide a detailed report describing why.
 
     Thank you for helping keep OGS enjoyable for everyone. We appreciate it.`,
+            ),
+            { game_id },
+        ),
+    ack_suspended_ai_user: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user",
+                `
+Thank you for your report about '{{reported}}'.
+
+That account has been suspended, and cheated games annulled.`,
+            ),
+            { reported },
+        ),
+
+    ack_warn_ai_user: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user",
+                `
+Thank you for your report about '{{reported}}'. We have given them a final warning about AI use, and their account will be suspended if that happens again.
+
+Cheated games have been annulled.`,
+            ),
+            { reported },
+        ),
+    warn_ai_user: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Warning message to a user",
+                `
+We've detected that you may be using AI assistance in your games.
+
+Using AI assistance is considered cheating and is prohibited.
+
+We ask that you resign from any ongoing games in which AI was used and refrain from seeking AI assistance in future games.
+
+Any further detection of AI use will result in suspension of your account.`,
+            ),
+            { game_id },
+        ),
+    ai_report_cancelled: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user",
+                `
+Thanks for the report about AI use in game #{{game_id}}.
+
+We looked at it but had to cancel your report.
+
+Possible reasons:
+-The game you reported has been reported before by another user, and handled.
+-The game you reported is too old and there was no recent misconduct by that user
+-Other policy related or technical reasons.
+`,
             ),
             { game_id },
         ),
@@ -417,7 +494,7 @@ It seems you failed to end game #{{game_id}} properly, and let it time out.
 
 If you continue to abandon games without finishing them properly your account will be suspended.
 
-We have previous explained that you need to resign if you feel the position is hopeless, or pass and accept the correct score then the game is over. 
+We have previous explained that you need to resign if you feel the position is hopeless, or pass and accept the correct score then the game is over.
 
 Please take care to do that each time, and ask for help if you are not clear what is the problem.
 
@@ -439,7 +516,7 @@ The outcome was wrong as a result - we've annulled that game.
 
 If you continue to abandon games without finishing them properly your account will be suspended.
 
-We have previous explained that you need to resign if you feel the position is hopeless, or pass and accept the correct score then the game is over. 
+We have previous explained that you need to resign if you feel the position is hopeless, or pass and accept the correct score then the game is over.
 
 Please take care to do that each time, and ask for help if you are not clear what is the problem.
 
@@ -611,6 +688,74 @@ That game has been annulled.
             ),
             { reported },
         ),
+    final_warn_thrown_game: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Final warning message to someone who deliberately lost a game",
+                `
+Important: this is a final warning.
+
+It seems you deliberately lost game #{{game_id}}.
+
+If you continue to deliberately lose games your account will be suspended.
+
+We've previously explained that deliberately losing games (sandbagging) is not allowed on OGS because it messes up the ranking system.
+
+Please play to the best of your ability in all your games.
+
+Thanks.
+`,
+            ),
+            { game_id },
+        ),
+    final_warn_thrown_game_and_annul: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Final warning message to someone who deliberately lost a game, and annul that game",
+                `
+Important: this is a final warning.
+
+It seems you deliberately lost game #{{game_id}}.
+
+We've annulled that game.
+
+If you continue to deliberately lose games your account will be suspended.
+
+We've previously explained that deliberately losing games (sandbagging) is not allowed on OGS because it messes up the ranking system.
+
+Please play to the best of your ability in all your games.
+
+Thanks.
+`,
+            ),
+            { game_id },
+        ),
+    ack_final_warn_thrown_game: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Message to acknowledge a report of someone who repeatedly threw games",
+                `
+Thank you for your report.  '{{reported}}' has been given a final warning about deliberately losing games.
+
+If this continues, their account will be suspended.
+`,
+            ),
+            { reported },
+        ),
+    ack_final_warn_thrown_game_and_annul: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Message to acknowledge a report of someone who repeatedly threw games, and annul a game",
+                `
+Thank you for your report.  '{{reported}}' has been given a final warning about deliberately losing games.
+
+If this continues, their account will be suspended.
+
+That game has been annulled.
+`,
+            ),
+            { reported },
+        ),
     ack_suspended: (reported) =>
         interpolate(
             llm_pgettext(
@@ -627,7 +772,7 @@ Thank you for your report.  '{{reported}}' is a repeat offender, their account h
             llm_pgettext(
                 "Message to acknowledge a report of a repeat offender and annul a game",
                 `
-Thank you for your report.  '{{reported}}' is a repeat offender, their has been suspended.
+Thank you for your report.  '{{reported}}' is a repeat offender, their account has been suspended.
 
 The reported game has been annulled.
 `,
@@ -676,5 +821,167 @@ We've notified the owner of that bot.
     `,
             ),
             { bot },
+        ),
+    warn_beginner_sandbagger: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Warning message to a new user about sandbagging",
+                `
+Hi, Welcome to OGS!
+
+It appears that you may have deliberately lost game #{{game_id}} to lower your rank. This is called "sandbagging" and is not allowed.
+
+Since you are a new player, no action will be taken against your account. We simply ask that you play to the best of your ability in all your games.
+
+If you want to play weaker opponents, you can adjust your game settings rather than manipulating your rank.
+        `,
+            ),
+            { game_id },
+        ),
+    warn_sandbagger: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Warning message to a user about sandbagging",
+                `
+It has come to our attention that you may have deliberately lost game #{{game_id}}.
+
+Deliberately losing games is called "sandbagging" and is not allowed on OGS, because it messes up the ranking system.
+
+Please play to the best of your ability in all your games. If you want to play weaker opponents, you can adjust your game settings rather than manipulating your rank.
+
+Continued sandbagging will result in suspension of your account.`,
+            ),
+            { game_id },
+        ),
+    ack_educated_beginner_sandbagger: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a beginner sandbagger",
+                `
+Thanks for the report about '{{reported}}', we've asked your newcomer opponent not to deliberately lose games.`,
+            ),
+            { reported },
+        ),
+    ack_educated_beginner_sandbagger_and_annul: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a beginner sandbagger",
+                `
+Thanks for the report about '{{reported}}', we've asked your newcomer opponent not to deliberately lose games.
+
+That sandbagged game has been annulled.`,
+            ),
+            { reported },
+        ),
+    ack_warned_sandbagger: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a sandbagger",
+                `
+Thank you for your report, '{{reported}}' has been given a formal warning about sandbagging.`,
+            ),
+            { reported },
+        ),
+    ack_warned_sandbagger_and_annul: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a sandbagger",
+                `
+Thank you for your report, '{{reported}}' has been given a formal warning about sandbagging, and that sandbagged game annulled.`,
+            ),
+            { reported },
+        ),
+    no_sandbagging_evident: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported sandbagging",
+                `
+Thank you for bringing the possible instance of sandbagging by '{{reported}}' to our attention. We looked into the report and did not see evidence of deliberate rank manipulation.
+
+It may be that you need to report a different type of problem, or provide more explanation - you are welcome to raise a new report if that is the case.
+
+Thank you for helping keep OGS enjoyable for everyone. We appreciate it.`,
+            ),
+            { reported },
+        ),
+    warn_beginner_thrown_game: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Warning message to a new user about throwing a game",
+                `
+Hi, Welcome to OGS!
+
+It appears that you may have deliberately lost game #{{game_id}}. Deliberately losing games is not allowed on OGS.
+
+Since you are a new player, no action will be taken against your account. We simply ask that you play to the best of your ability in all your games.
+        `,
+            ),
+            { game_id },
+        ),
+    warn_thrown_game: (game_id) =>
+        interpolate(
+            llm_pgettext(
+                "Warning message to a user about throwing a game",
+                `
+It has come to our attention that you may have deliberately lost game #{{game_id}}.
+
+Deliberately losing games is not allowed on OGS, because it negatively affects the experience of other players and messes up the ranking system.
+
+Please play to the best of your ability in all your games.
+
+Continued deliberately losing games will result in suspension of your account.`,
+            ),
+            { game_id },
+        ),
+    ack_educated_beginner_thrown_game: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a beginner for throwing a game",
+                `
+Thanks for the report about '{{reported}}', we've asked your newcomer opponent not to deliberately lose games.`,
+            ),
+            { reported },
+        ),
+    ack_educated_beginner_thrown_game_and_annul: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported a beginner for throwing a game",
+                `
+Thanks for the report about '{{reported}}', we've asked your newcomer opponent not to deliberately lose games.
+
+That game has been annulled.`,
+            ),
+            { reported },
+        ),
+    ack_warned_thrown_game: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported someone for throwing a game",
+                `
+Thank you for your report, '{{reported}}' has been given a formal warning about deliberately losing games.`,
+            ),
+            { reported },
+        ),
+    ack_warned_thrown_game_and_annul: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported someone for throwing a game",
+                `
+Thank you for your report, '{{reported}}' has been given a formal warning about deliberately losing games, and that game has been annulled.`,
+            ),
+            { reported },
+        ),
+    no_thrown_game_evident: (reported) =>
+        interpolate(
+            llm_pgettext(
+                "Acknowledgement message to a user who reported someone for throwing a game",
+                `
+Thank you for bringing the possible instance of deliberately losing a game by '{{reported}}' to our attention. We looked into the report and did not see evidence that the game was deliberately lost.
+
+It may be that you need to report a different type of problem, or provide more explanation - you are welcome to raise a new report if that is the case.
+
+Thank you for helping keep OGS enjoyable for everyone. We appreciate it.`,
+            ),
+            { reported },
         ),
 };

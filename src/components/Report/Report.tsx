@@ -29,6 +29,7 @@ import { useUser } from "@/lib/hooks";
 import { get } from "@/lib/requests";
 import { toast } from "@/lib/toast";
 import { getPrintableError } from "@/lib/misc";
+import "./Report.css";
 
 export type ReportType =
     | "all" // not a type, just useful for the enumeration
@@ -40,6 +41,8 @@ export type ReportType =
     | "ai_use"
     | "assess_ai_play"
     | "sandbagging"
+    | "sandbagging_assessment" // escalated sandbagging reports, for moderators only
+    | "thrown_game"
     | "escaping"
     | "appeal"
     | "other"
@@ -158,6 +161,36 @@ export const report_categories: ReportDescription[] = [
         check_applicability: checkGameForStallingReportApplicability,
     },
     {
+        type: "thrown_game",
+        title: pgettext("Report user for throwing a game", "Thrown Game"),
+        description: pgettext(
+            "Report user for throwing a game",
+            "User intentionally lost the game.",
+        ),
+        game_id_required: true,
+        not_reportable: true, // Reports of this type result from sandbagging reports where the accused lost
+    },
+    {
+        type: "sandbagging",
+        title: pgettext("Report user for sandbagging", "Sandbagging"),
+        description: pgettext(
+            "Report user for sandbagging",
+            "User is resigning or timing out won games to purposefully lower their rank.",
+        ),
+        game_id_required: true,
+    },
+    {
+        type: "sandbagging_assessment",
+        title: pgettext("Sandbagging assessment by moderators", "Sandbagging Assessment"),
+        description: pgettext(
+            "Sandbagging assessment by moderators",
+            "Escalated sandbagging reports for moderator review.",
+        ),
+        game_id_required: true,
+        moderator_only: true,
+        not_reportable: true, // Reports of this type result from CM escalation, not from a player
+    },
+    {
         type: "inappropriate_content",
         title: pgettext("Report user for inappropriate content", "Inappropriate Content"),
         description: pgettext(
@@ -171,15 +204,6 @@ export const report_categories: ReportDescription[] = [
         title: pgettext("Report user for harassment", "Harassment"),
         description: pgettext("Report user for harassment", "User is harassing other users."),
         min_description_length: 20,
-    },
-    {
-        type: "sandbagging",
-        title: pgettext("Report user for sandbagging", "Sandbagging"),
-        description: pgettext(
-            "Report user for sandbagging",
-            "User is resigning or timing out won games to purposefully lower their rank.",
-        ),
-        game_id_required: true,
     },
     {
         type: "ai_use",
@@ -471,7 +495,9 @@ export function Report(props: ReportProperties): React.ReactElement {
             </div>
             {(reported_conversation || null) && (
                 <div className="reported-conversation">
-                    {reported_conversation?.content.map((line, idx) => <div key={idx}>{line}</div>)}
+                    {reported_conversation?.content.map((line, idx) => (
+                        <div key={idx}>{line}</div>
+                    ))}
                 </div>
             )}
             {more_description_needed && category?.min_description_length && (

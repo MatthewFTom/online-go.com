@@ -15,36 +15,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as React from "react";
-import { GobanController } from "../../lib/GobanController";
-
-export const GobanControllerContext = React.createContext<GobanController | null>(null);
-
-/**
- * A React hook that provides the GameController (which contains our goban).
- * Always returns a non-null type but may throw at runtime.
- * Use this for components that certainly have a goban controller in context.
- */
-export function useGobanController(): GobanController {
-    const controller = React.useContext(GobanControllerContext);
-
-    if (controller === null) {
-        throw TypeError("useContext: controller is null.");
-    }
-    if (!controller) {
-        throw TypeError("GobanControllerContext was not set.");
-    }
-
-    return controller;
-}
-
-/**
- * A React hook that provides the GameController (which contains our goban).
- * Returns null if no context provider is available.
- * Use this where we don't know if the component has a goban controller in context
- * (and handles that properly)
- */
-export function useGobanControllerOrNull(): GobanController | null {
-    const controller = React.useContext(GobanControllerContext);
-    return controller;
-}
+// Re-export from shared location for backward compatibility
+export {
+    GobanControllerContext,
+    useGobanController,
+    useGobanControllerOrNull,
+} from "@/components/GobanView";

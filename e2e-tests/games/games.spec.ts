@@ -18,17 +18,21 @@
 import { ogsTest } from "@helpers";
 import { basicScoringTest } from "./basic-scoring";
 import { conditionalMovesArrowBugTest } from "./conditional-moves-arrow";
-import { detectContainedSimulTest } from "./simul-detection";
+import { simulDetectionTest } from "./simul-detection";
+import { simulPauseDetectionTest } from "./simul-pause-detection";
 import { gameLogThumbnailMarksTest } from "./game-log-thumbnail-marks";
 import { gameLogScoringAreasTest } from "./game-log-scoring-areas";
+import { sgfDownloadRestrictionsTest } from "./sgf-download-restrictions";
 
 ogsTest.describe("@Games Tests", () => {
     ogsTest("Pass and score a game", basicScoringTest);
     ogsTest("Use arrow in conditional moves", conditionalMovesArrowBugTest);
-    ogsTest("Detect contained simultaneous game", detectContainedSimulTest);
+    ogsTest("Detect simultaneous games", simulDetectionTest);
+    ogsTest("Paused games excluded from simul detection", simulPauseDetectionTest);
     ogsTest(
         "@Visual GameLog thumbnails display marks correctly VISUAL INSPECTION REQUIRED",
         gameLogThumbnailMarksTest,
     );
     ogsTest("@Visual Scored area marking VISUAL INSPECTION REQUIRED", gameLogScoringAreasTest);
+    ogsTest("SGF download restrictions by auth and game state", sgfDownloadRestrictionsTest);
 });

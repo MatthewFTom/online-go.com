@@ -31,6 +31,7 @@ import * as player_cache from "@/lib/player_cache";
 import * as preferences from "@/lib/preferences";
 import online_status from "@/lib/online_status";
 import { ReportContext } from "@/contexts/ReportContext";
+import "./Player.css";
 
 /* There are cases where what we are handed is some odd looking dirty data. We
  * should probably start warning about remaining uses of these fields and then
@@ -73,6 +74,8 @@ export interface PlayerProperties {
     disableCacheUpdate?: boolean;
     forceShowRank?: boolean;
     showAsBanned?: boolean; // client can request us to render as banned (we can't find out here)
+    tabIndex?: number; // control tab order for accessibility
+    gameId?: number; // When provided, enables tagging for moderators
 }
 
 export function Player(props: PlayerProperties): React.ReactElement {
@@ -239,6 +242,7 @@ export function Player(props: PlayerProperties): React.ReactElement {
                 elt: (
                     <PlayerDetails
                         playerId={player_id}
+                        gameId={props.gameId}
                         noextracontrols={props.noextracontrols}
                         nochallenge={props.nochallenge}
                         chatId={chat_id || undefined}
@@ -280,6 +284,7 @@ export function Player(props: PlayerProperties): React.ReactElement {
     const main_attrs: any = {
         className: "Player",
         "data-player-id": player_id,
+        "data-ready": !!player, // true when player data has loaded
     };
 
     if (props.icon) {
@@ -390,7 +395,13 @@ export function Player(props: PlayerProperties): React.ReactElement {
         return (
             // if only we could put {...main_attrs} on the span, we could put the styles in .Player.  But router seems to hate that.
             <span>
-                <a href={uri} ref={elt_ref} {...main_attrs} onClick={display_details}>
+                <a
+                    href={uri}
+                    ref={elt_ref}
+                    {...main_attrs}
+                    onClick={display_details}
+                    tabIndex={props.tabIndex}
+                >
                     {(props.icon || null) && (
                         <PlayerIcon user={combined} size={props.iconSize || 16} />
                     )}

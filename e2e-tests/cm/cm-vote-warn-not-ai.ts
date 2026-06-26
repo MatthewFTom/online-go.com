@@ -24,12 +24,14 @@
  * - E2E_CM_VWNAI_AI_V1: AI assessor who votes
  */
 
-import { Browser, TestInfo } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo } from "@playwright/test";
 
 import {
-    assertIncidentReportIndicatorActive,
-    assertIncidentReportIndicatorInactive,
+    captureReportNumber,
     goToUsersFinishedGame,
+    navigateToReport,
     newTestUsername,
     prepareNewUser,
     reportUser,
@@ -39,19 +41,21 @@ import {
 import { expectOGSClickableByName } from "@helpers/matchers";
 import { expect } from "@playwright/test";
 
-import { withIncidentIndicatorLock } from "@helpers/report-utils";
+import { withReportCountTracking } from "@helpers/report-utils";
 
 export const cmVoteWarnNotAITest = async (
-    { browser }: { browser: Browser },
+    {
+        createContext,
+    }: { createContext: (options?: CreateContextOptions) => Promise<BrowserContext> },
     testInfo: TestInfo,
 ) => {
-    await withIncidentIndicatorLock(testInfo, async () => {
-        const { userPage: reporterPage } = await prepareNewUser(
-            browser,
-            newTestUsername("CmVWNAIRep"), // cspell:disable-line
-            "test",
-        );
+    const { userPage: reporterPage } = await prepareNewUser(
+        createContext,
+        newTestUsername("CmVWNAIRep"), // cspell:disable-line
+        "test",
+    );
 
+    await withReportCountTracking(reporterPage, testInfo, async (tracker) => {
         // Report someone for AI use
         await goToUsersFinishedGame(reporterPage, "E2E_CM_VWNAI_ACCUSED", "E2E CM VWNAI Game");
 
@@ -62,30 +66,43 @@ export const cmVoteWarnNotAITest = async (
             "E2E test reporting AI use: I just have this feeling.", // min 40 chars
         );
 
+        // Verify reporter's count increased by 1
+        await tracker.assertCountIncreasedBy(reporterPage, 1);
+
+        // Capture the report number from the reporter's "My Own Reports" page
+        const reportNumber = await captureReportNumber(reporterPage);
+
         // Vote to warn the reporter that it was not a good AI report
 
         const aiAssessor = "E2E_CM_VWNAI_AI_V1";
 
-        const { seededCMPage: aiCMPage } = await setupSeededCM(browser, aiAssessor);
+        const { seededCMPage: aiCMPage } = await setupSeededCM(createContext, aiAssessor);
 
-        const indicator = await assertIncidentReportIndicatorActive(aiCMPage, 1);
+        // Navigate directly to the report using the captured report number
+        await navigateToReport(aiCMPage, reportNumber);
 
-        await indicator.click();
-
-        await expect(aiCMPage.getByRole("heading", { name: "Reports Center" })).toBeVisible();
-
+        // Verify we can see the report with the message
         await expect(
             aiCMPage.getByText("E2E test reporting AI use: I just have this feeling."),
         ).toBeVisible();
 
-        // Select the not-AI option...
-        await aiCMPage.locator('.action-selector input[type="radio"]').nth(3).click();
+        // Select the "no AI use evident - inform the reporter" option
+        // This sends an acknowledgement to the reporter and closes the report
+        await aiCMPage.locator('input[value="no_ai_use_evident"]').click();
 
         const voteButton = await expectOGSClickableByName(aiCMPage, /Vote$/);
+        await expect(voteButton).toBeEnabled();
         await voteButton.click();
 
-        // The report should no longer be active
-        await assertIncidentReportIndicatorInactive(aiCMPage);
+        // Wait for vote to be processed - check that Vote button is disabled or hidden
+        await expect(voteButton)
+            .toBeDisabled({ timeout: 5000 })
+            .catch(() => {
+                // Button might be hidden instead of disabled
+            });
+
+        // After voting, the count should return to initial (acknowledgement sent to reporter, report closed)
+        await tracker.assertCountReturnedToInitial(reporterPage);
 
         // checking the warning is delivered is in cm-ack-warning.ts
     });

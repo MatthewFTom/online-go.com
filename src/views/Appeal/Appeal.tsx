@@ -16,6 +16,7 @@
  */
 
 import * as React from "react";
+import * as DynamicHelp from "react-dynamic-help";
 import * as data from "@/lib/data";
 import { Card } from "@/components/material";
 import { post, get, patch, put } from "@/lib/requests";
@@ -27,6 +28,14 @@ import { AutoTranslate } from "@/components/AutoTranslate";
 import { UIPush } from "@/components/UIPush";
 import { getPrivateChat } from "@/components/PrivateChat";
 import * as player_cache from "@/lib/player_cache";
+import { TemplateSelector } from "./TemplateSelector";
+import "./Appeal.css";
+
+// These are strings used to identify the reason for suspension.
+// They need to match the reason for suspension on the back end from moderator vote to suspend.
+export const AI_USE_DETECTED_REASON = "AI Use detected";
+export const ESCAPING_SUSPENSION_REASON =
+    "Community moderation vote for suspension based on Stopped Playing reports";
 
 interface AppealMessage {
     id: number;
@@ -60,7 +69,24 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
     const [allow_further_appeals, setAllowFurtherAppeals] = React.useState(true);
 
     const ban_reason: string = reason_for_ban || data.get("appeals.ban-reason", "");
+
+    const { registerTargetItem, triggerFlow } = React.useContext(DynamicHelp.Api);
+    const { ref: aiDetectionSuspensionRef } = registerTargetItem("ai-detection-suspension-reason");
+    const { ref: escapingSuspensionRef } = registerTargetItem("escaping-suspension-reason");
+
     React.useEffect(refresh, [props.player_id]);
+
+    React.useEffect(() => {
+        // Only show help flows for the banned user, not for moderators viewing the appeal
+        if (user.is_moderator) {
+            return;
+        }
+        if (ban_reason === AI_USE_DETECTED_REASON) {
+            triggerFlow("ai-detection-appeal-help");
+        } else if (ban_reason === ESCAPING_SUSPENSION_REASON) {
+            triggerFlow("escaping-appeal-help");
+        }
+    }, [ban_reason, triggerFlow, user.is_moderator]);
 
     if (!user.is_moderator && !jwt_key) {
         window.location.pathname = "/sign-in";
@@ -68,6 +94,13 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
     }
 
     const mod = user && user.is_moderator;
+    const suspensionReasonRef = mod
+        ? undefined
+        : ban_reason === AI_USE_DETECTED_REASON
+          ? aiDetectionSuspensionRef
+          : ban_reason === ESCAPING_SUSPENSION_REASON
+            ? escapingSuspensionRef
+            : undefined;
     const placeholder = mod
         ? "You can respond to the user's appeal here. Click 'hidden' for the response to only be visible to other moderators."
         : pgettext(
@@ -92,16 +125,12 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
                 <h1>{_("Your account has been re-activated, welcome back.")}</h1>
             )}
             {ban_reason && still_banned && (
-                <h2>
-                    {interpolate(
-                        pgettext(
-                            "Reason the player's account was suspended",
-                            "Reason for suspension: {{reason}}",
-                        ),
-                        {
-                            reason: ban_reason,
-                        },
-                    )}
+                <h2 ref={suspensionReasonRef}>
+                    {pgettext(
+                        "Label shown before the suspension reason text",
+                        "Reason for suspension:",
+                    )}{" "}
+                    {ban_reason}
                 </h2>
             )}
             {ban_expiration && still_banned && (
@@ -145,6 +174,13 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
                 </>
             )}
             <Card className="input-card">
+                {(mod || null) && (
+                    <TemplateSelector
+                        banReason={ban_reason}
+                        currentText={messageText}
+                        onSelectTemplate={setMessageText}
+                    />
+                )}
                 <textarea
                     value={messageText}
                     onChange={(ev) => setMessageText(ev.target.value)}
@@ -239,6 +275,7 @@ export function Appeal(props: { player_id?: number }): React.ReactElement | null
         })
             .then((response) => {
                 console.log(response);
+                refresh();
 
                 // If the user is not suspended and this is a moderator message,
                 // send the message as a system PM so the user can see it

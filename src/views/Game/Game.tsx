@@ -20,7 +20,7 @@ import { useParams, useLocation, useSearchParams } from "react-router-dom";
 
 import * as data from "@/lib/data";
 import * as preferences from "@/lib/preferences";
-import { _, interpolate } from "@/lib/translate";
+import { _, interpolate, pgettext } from "@/lib/translate";
 import { popover } from "@/lib/popover";
 import { get, abort_requests_in_flight } from "@/lib/requests";
 import { UIPush } from "@/components/UIPush";
@@ -46,7 +46,6 @@ import { GobanController } from "@/lib/GobanController";
 import {
     FragAIReview,
     FragBelowBoardControls,
-    FragTimings,
     GameInformation,
     GameKeyboardShortcuts,
     RengoHeader,
@@ -54,6 +53,9 @@ import {
 import { toast } from "@/lib/toast";
 import { ignore } from "@/lib/misc";
 import { updateAntiGriefGameState } from "./AntiGrief";
+import "./Game.css";
+import "./Players.css";
+import "./MoveTree.css";
 
 export function Game(): React.ReactElement | null {
     const params = useParams<"game_id" | "review_id" | "move_number">();
@@ -109,6 +111,8 @@ export function Game(): React.ReactElement | null {
     const [, set_undo_requested] = React.useState<number | undefined>();
     const [bot_detection_results, set_bot_detection_results] = React.useState<any>(null);
     const [show_bot_detection_results, set_show_bot_detection_results] = React.useState(false);
+    const [simul_black, set_simul_black] = React.useState<boolean | null>(null);
+    const [simul_white, set_simul_white] = React.useState<boolean | null>(null);
     const view_mode = useViewMode(goban_controller.current);
     const mode = useMode(goban);
     const zen_mode = useZenMode(goban_controller.current);
@@ -141,6 +145,25 @@ export function Game(): React.ReactElement | null {
             }
         }
     };
+
+    const applyReviewFallback = React.useCallback((title: string) => {
+        if (window.location.pathname.startsWith("/review/")) {
+            return _("Review");
+        }
+        if (window.location.pathname.startsWith("/demo/")) {
+            return _("Demo");
+        }
+        return title || _("OGS");
+    }, []);
+
+    const setTabTitle = React.useCallback(
+        (title: string) => {
+            const finalTitle = applyReviewFallback(title);
+            window.document.title = finalTitle;
+            on_refocus_title.current = finalTitle;
+        },
+        [applyReviewFallback],
+    );
 
     const onFocus = () => {
         if (goban?.engine) {
@@ -250,6 +273,9 @@ export function Game(): React.ReactElement | null {
             opts.isPlayerController = () =>
                 goban_controller.current?.goban?.review_controller_id === data.get("user").id;
         }
+        if (review_id) {
+            setTabTitle("");
+        }
 
         goban_controller.current?.destroy();
         goban_controller.current = new GobanController(opts);
@@ -298,15 +324,17 @@ export function Game(): React.ReactElement | null {
             last_move_viewed.current = 0;
             on_refocus_title.current = last_title;
             goban.on("state_text", (state) => {
-                on_refocus_title.current = state.title;
+                const title = applyReviewFallback(state.title);
+
+                on_refocus_title.current = title;
                 if (state.show_moves_made_count) {
                     if (!goban) {
-                        window.document.title = state.title;
+                        window.document.title = title;
                         return;
                     }
                     if (document.hasFocus()) {
                         last_move_viewed.current = goban!.engine.getMoveNumber();
-                        window.document.title = state.title;
+                        window.document.title = title;
                     } else {
                         const diff = goban!.engine.getMoveNumber() - last_move_viewed.current;
                         if (diff > 0) {
@@ -314,7 +342,7 @@ export function Game(): React.ReactElement | null {
                         }
                     }
                 } else {
-                    window.document.title = state.title;
+                    window.document.title = title;
                 }
             });
         }
@@ -333,8 +361,10 @@ export function Game(): React.ReactElement | null {
             updateAntiGriefGameState(goban);
         };
 
-        goban.on("phase", () => {
-            goban!.engine.cur_move.clearMarks();
+        goban.on("phase", (phase) => {
+            if (phase !== "stone removal") {
+                goban!.engine.cur_move.clearMarks();
+            }
             // Update AntiGrief state when phase changes
             updateAntiGriefGameState(goban);
         });
@@ -417,7 +447,8 @@ export function Game(): React.ReactElement | null {
             });
         }
 
-        if (game_id) {
+        // negative (temporary) games only exist in Cassandra and are loaded via WebSocket
+        if (game_id && game_id > 0) {
             get(`games/${game_id}`)
                 .then((game: rest_api.GameDetails) => {
                     if (game.players.white.id) {
@@ -433,9 +464,7 @@ export function Game(): React.ReactElement | null {
                         black_username.current &&
                         !preferences.get("dynamic-title")
                     ) {
-                        on_refocus_title.current =
-                            black_username.current + " vs " + white_username.current;
-                        window.document.title = on_refocus_title.current;
+                        setTabTitle(black_username.current + " vs " + white_username.current);
                     }
                     if (goban_controller.current) {
                         goban_controller.current.creator_id = game.creator;
@@ -460,6 +489,8 @@ export function Game(): React.ReactElement | null {
                     set_historical_black(game.historical_ratings.black);
                     set_historical_white(game.historical_ratings.white);
                     set_bot_detection_results(game.bot_detection_results);
+                    set_simul_black(game.simul_black ?? null);
+                    set_simul_white(game.simul_white ?? null);
 
                     goban_div.current?.setAttribute("data-game-id", game_id.toString());
 
@@ -479,11 +510,13 @@ export function Game(): React.ReactElement | null {
                         }
                     }
 
-                    const live = isLiveGame(
-                        JSON.parse(game.time_control_parameters),
-                        game.width,
-                        game.height,
-                    );
+                    const live =
+                        game.time_control_parameters &&
+                        isLiveGame(
+                            JSON.parse(game.time_control_parameters),
+                            game.width,
+                            game.height,
+                        );
 
                     if (!live) {
                         goban_controller.current?.setZenMode(false);
@@ -521,6 +554,12 @@ export function Game(): React.ReactElement | null {
                         icon: "error",
                     });
                 });
+        }
+        if (game_id < 0) {
+            // Temporary game - data will load via WebSocket
+            console.log(
+                `[${game_id}] Temporary game detected - skipping Django API, loading via WebSocket only`,
+            );
         }
 
         if (review_id) {
@@ -627,7 +666,7 @@ export function Game(): React.ReactElement | null {
         <PlayControls annulment_reason={annulment_reason} />
     );
 
-    const GAME_DOCK = (
+    const renderGameDock = (inline: boolean) => (
         <GameDock
             tournament_id={tournament_id.current}
             tournament_name={tournament?.name}
@@ -635,6 +674,7 @@ export function Game(): React.ReactElement | null {
             historical_black={historical_black}
             historical_white={historical_white}
             ai_suspected={bot_detection_results?.ai_suspected.length > 0}
+            className={inline ? "inline" : undefined}
         />
     );
 
@@ -694,7 +734,9 @@ export function Game(): React.ReactElement | null {
 
                         {view_mode === "square" && !squashed && CHAT}
 
-                        {view_mode === "portrait" && !zen_mode && <FragAIReview />}
+                        {view_mode === "portrait" && !zen_mode && (
+                            <FragAIReview simul_black={simul_black} simul_white={simul_white} />
+                        )}
 
                         {view_mode === "portrait" && CONTROLS}
 
@@ -706,7 +748,7 @@ export function Game(): React.ReactElement | null {
                             mode === "play" &&
                             phase === "play" && <CancelButton className="bold reject" />}
 
-                        {view_mode === "portrait" && !zen_mode && GAME_DOCK}
+                        {view_mode === "portrait" && !zen_mode && renderGameDock(true)}
                     </div>
 
                     {view_mode !== "portrait" && (
@@ -733,20 +775,36 @@ export function Game(): React.ReactElement | null {
                             )}
 
                             {(view_mode === "square" || view_mode === "wide") && !zen_mode && (
-                                <FragAIReview />
+                                <FragAIReview
+                                    simul_black={simul_black}
+                                    simul_white={simul_white}
+                                    showGameTimings={show_game_timing}
+                                />
                             )}
-
-                            {(view_mode === "square" || view_mode === "wide") &&
-                                show_game_timing && <FragTimings />}
 
                             {(view_mode === "square" || view_mode === "wide") &&
                                 show_bot_detection_results &&
                                 bot_detection_results?.ai_suspected.length > 0 && (
-                                    <BotDetectionResults
-                                        bot_detection_results={bot_detection_results}
-                                        game_id={game_id}
-                                        updateBotDetectionResults={set_bot_detection_results}
-                                    />
+                                    <>
+                                        {(simul_black || simul_white) && (
+                                            <div className="simul-warning">
+                                                {pgettext(
+                                                    "A label that means the game is played at the same time as another game",
+                                                    "Simul",
+                                                )}
+                                                {simul_black && simul_white
+                                                    ? " (both players)"
+                                                    : simul_black
+                                                      ? " (black)"
+                                                      : " (white)"}
+                                            </div>
+                                        )}
+                                        <BotDetectionResults
+                                            bot_detection_results={bot_detection_results}
+                                            game_id={game_id}
+                                            updateBotDetectionResults={set_bot_detection_results}
+                                        />
+                                    </>
                                 )}
 
                             {CONTROLS}
@@ -755,7 +813,7 @@ export function Game(): React.ReactElement | null {
                             {view_mode === "square" && squashed && CHAT}
                             {view_mode === "square" && squashed && CHAT}
 
-                            {GAME_DOCK}
+                            {renderGameDock(false)}
                             {zen_mode && <div className="align-col-end"></div>}
                         </div>
                     )}

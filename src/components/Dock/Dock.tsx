@@ -18,6 +18,7 @@
 import * as React from "react";
 import * as preferences from "@/lib/preferences";
 import { MAX_DOCK_DELAY } from "@/lib/SettingsCommon";
+import "./Dock.css";
 
 interface DockProperties {
     className?: string;
@@ -68,7 +69,7 @@ export class Dock extends React.Component<DockProperties, DockState> {
                 onMouseEnter={this.mouseEntered}
                 onMouseLeave={this.mouseExited}
                 {...this.props}
-                className={"Dock" + (this.props.className || "")}
+                className={"Dock" + (this.props.className ? " " + this.props.className : "")}
                 style={{ transition: this.getTransitionStyle() }}
             >
                 {this.props.children}

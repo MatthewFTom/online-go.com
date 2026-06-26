@@ -17,7 +17,6 @@
 
 import * as React from "react";
 import * as data from "@/lib/data";
-import Linkify from "react-linkify";
 import Split from "react-split";
 import { Card } from "@/components/material";
 import { socket } from "@/lib/sockets";
@@ -45,6 +44,38 @@ import { profanity_filter } from "@/lib/profanity_filter";
 import { popover } from "@/lib/popover";
 import { alert } from "@/lib/swal_config";
 import { useUser } from "@/lib/hooks";
+import "./ChatLog.css";
+
+const URL_REGEX =
+    /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_+.~#?&//=]*)/g;
+
+function parseTextWithLinks(text: string): React.ReactNode {
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+
+    for (const match of text.matchAll(URL_REGEX)) {
+        const url = match[0];
+        const index = match.index!;
+
+        if (index > lastIndex) {
+            parts.push(text.substring(lastIndex, index));
+        }
+
+        parts.push(
+            <a key={index} href={url} target="_blank" rel="noopener noreferrer">
+                {url}
+            </a>,
+        );
+
+        lastIndex = index + url.length;
+    }
+
+    if (lastIndex < text.length) {
+        parts.push(text.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : text;
+}
 
 interface ChatLogProperties {
     channel: string;
@@ -338,10 +369,10 @@ function ChannelTopic({
                         <div className="channel-topic" title={title_hover}>
                             <div className="topic">
                                 <span className="content">
-                                    <Linkify>
-                                        {localize_time_strings(profanity_filter(topic.trim())) ||
-                                            name}
-                                    </Linkify>
+                                    {parseTextWithLinks(
+                                        localize_time_strings(profanity_filter(topic.trim())) ||
+                                            name,
+                                    )}
                                 </span>
                             </div>
                         </div>
@@ -446,13 +477,19 @@ function ChatLines({
             return;
         }
 
-        const tf = div.scrollHeight - div.scrollTop - 10 < div.offsetHeight;
+        // Because chat-log uses flex-direction: column-reverse to achieve
+        // bottom-anchoring, the scroll direction is inverted: scrollTop is 0
+        // when at the bottom, and becomes negative as the user scrolls up.
+        // Therefore the "is at bottom" check changes from the normal
+        //   scrollHeight - scrollTop - 10 < offsetHeight
+        // to simply checking whether scrollTop is close to 0.
+        const tf = div.scrollTop > -10;
         if (tf !== scrolled_to_bottom) {
             scrolled_to_bottom = tf;
             div.className =
                 (rtl_mode ? "rtl chat-lines " : "chat-lines ") + (tf ? "autoscrolling" : "");
         }
-        scrolled_to_bottom = div.scrollHeight - div.scrollTop - 10 < div.offsetHeight;
+        scrolled_to_bottom = div.scrollTop > -10;
     }, [channel]);
 
     window.requestAnimationFrame(() => {
@@ -462,10 +499,10 @@ function ChatLines({
         }
 
         if (scrolled_to_bottom) {
-            div.scrollTop = div.scrollHeight;
+            div.scrollTop = 0;
             setTimeout(() => {
                 try {
-                    div.scrollTop = div.scrollHeight;
+                    div.scrollTop = 0;
                 } catch {
                     // ignore error
                 }
@@ -482,13 +519,20 @@ function ChatLines({
             onScroll={onScroll}
             onClick={focusInput}
         >
-            {proxy?.channel.chat_log.slice(-500).map((line, idx) => {
-                const ll = last_line;
-                last_line = line;
-                return (
-                    <ChatLine key={line.message.i || `system-${idx}`} line={line} lastLine={ll} />
-                );
-            })}
+            <div className="chat-lines-spacer" />
+            <div className="chat-lines-inner">
+                {proxy?.channel.chat_log.slice(-500).map((line, idx) => {
+                    const ll = last_line;
+                    last_line = line;
+                    return (
+                        <ChatLine
+                            key={line.message.i || `system-${idx}`}
+                            line={line}
+                            lastLine={ll}
+                        />
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -518,9 +562,18 @@ function ChatInput({
     }, [channel]);
 
     const onKeyPress = useCallback(
-        (event: React.KeyboardEvent<HTMLInputElement>): boolean | undefined => {
-            if (event.charCode === 13) {
-                const input = event.target as HTMLInputElement;
+        (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean | undefined => {
+            if (event.key.length === 1) {
+                const lines = (event.target as HTMLElement)
+                    .closest(".ChatLog")
+                    ?.querySelector(".chat-lines") as HTMLElement | null;
+                if (lines) {
+                    lines.scrollTop = 0;
+                }
+            }
+
+            if (!event.shiftKey && event.key === "Enter") {
+                const input = event.target as HTMLTextAreaElement;
                 if (!socket.connected) {
                     void alert.fire(_("Connection to server lost"));
                     return false;

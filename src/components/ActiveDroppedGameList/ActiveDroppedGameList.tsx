@@ -19,6 +19,7 @@ import * as React from "react";
 import { _ } from "@/lib/translate";
 import { GameList } from "@/components/GameList";
 import { PlayerCacheEntry } from "@/lib/player_cache";
+import "./ActiveDroppedGameList.css";
 
 interface UserType {
     id: number;
@@ -28,7 +29,7 @@ interface UserType {
 interface ActiveDroppedGameListProps {
     games: any[];
     user: UserType;
-    noActiveGamesView?: React.ReactElement;
+    showCount?: boolean;
 }
 
 export function ActiveDroppedGameList(props: ActiveDroppedGameListProps): React.ReactElement {
@@ -43,9 +44,9 @@ export function ActiveDroppedGameList(props: ActiveDroppedGameListProps): React.
         <>
             {hasActiveGames && (
                 <div className="active-games">
-                    <h2>
-                        {_("Active Games")} ({activeGames.length})
-                    </h2>
+                    <div className="active-games-header">
+                        {_("Active Games")} {props.showCount && `(${activeGames.length})`}
+                    </div>
                     <GameList
                         list={activeGames}
                         player={props.user}
@@ -53,7 +54,9 @@ export function ActiveDroppedGameList(props: ActiveDroppedGameListProps): React.
                     />
                 </div>
             )}
-            {((!hasActiveGames && props.noActiveGamesView) || null) && props.noActiveGamesView}
+            {!hasActiveGames && !hasDroppedGames && (
+                <div className="no-active-games">{_("No active games")}</div>
+            )}
             {hasDroppedGames && (
                 <div className="dropped-games">
                     <div className="dropped-games-header">

@@ -17,7 +17,9 @@
 
 // (No seeded data in use)
 
-import { Browser } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext } from "@playwright/test";
 import { expect } from "@playwright/test";
 
 import { newTestUsername, prepareNewUser } from "@helpers/user-utils";
@@ -28,15 +30,23 @@ import {
 } from "@helpers/challenge-utils";
 import { clickOnGobanIntersection, playMoves } from "@helpers/game-utils";
 
-export const conditionalMovesArrowBugTest = async ({ browser }: { browser: Browser }) => {
+export const conditionalMovesArrowBugTest = async ({
+    createContext,
+}: {
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>;
+}) => {
     const { userPage: challengerPage } = await prepareNewUser(
-        browser,
+        createContext,
         newTestUsername("gamesCondCh"), // cspell:disable-line
         "test",
     );
 
     const acceptorUsername = newTestUsername("gamesCondAc"); // cspell:disable-line
-    const { userPage: acceptorPage } = await prepareNewUser(browser, acceptorUsername, "test");
+    const { userPage: acceptorPage } = await prepareNewUser(
+        createContext,
+        acceptorUsername,
+        "test",
+    );
 
     const boardSize = "9x9"; // needed in two places\
 
@@ -66,9 +76,22 @@ export const conditionalMovesArrowBugTest = async ({ browser }: { browser: Brows
 
     await playMoves(challengerPage, acceptorPage, moves, boardSize);
 
-    await acceptorPage
-        .locator('a:has(i.fa.fa-exchange):has-text("Plan conditional moves")')
-        .click();
+    // Wait for the turn to change to the challenger so "Your move" disappears from acceptor's page
+    const acceptorYourMove = acceptorPage.getByText("Your move", { exact: true });
+    await expect(acceptorYourMove).toBeHidden();
+
+    // Verify it's the challenger's turn now
+    const challengerYourMove = challengerPage.getByText("Your move", { exact: true });
+    await expect(challengerYourMove).toBeVisible();
+
+    // Now the "Plan conditional moves" link should be visible on acceptor's page
+    // (it's only visible when it's NOT your turn)
+    // The link is an <a> tag (not with href, so not a true "link" role) with an exchange icon
+    const planConditionalMovesLink = acceptorPage.locator(
+        'a:has(i.fa-exchange):has-text("Plan conditional moves")',
+    );
+    await expect(planConditionalMovesLink).toBeVisible();
+    await planConditionalMovesLink.click();
 
     const conditionalMoves = acceptorPage.getByText("Conditional Move Planner");
     await expect(conditionalMoves).toBeVisible();

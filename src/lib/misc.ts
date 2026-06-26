@@ -22,6 +22,8 @@ import * as preferences from "@/lib/preferences";
 import { alert } from "@/lib/swal_config";
 import React from "react";
 
+export const maxMessageLength = 1024;
+
 export type Timeout = ReturnType<typeof setTimeout>;
 
 export function updateDup(obj: any, field: string, value: any) {
@@ -386,7 +388,23 @@ export function errorLogger(...args: any[]) {
     }
     console.error(err);
 }
-export function string_splitter(str: string, max_length: number = 200): Array<string> {
+export function sanitizeMessage(text: string): string {
+    let normalized = text.trim();
+
+    if (normalized.length === 0) {
+        return "";
+    }
+
+    normalized = normalized.replace(/[\u200B-\u200D\uFEFF]/g, "");
+    normalized = normalized.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    normalized = normalized.replace(/[^\S\n]+|\n[^\S\n]*/g, (match) =>
+        match.includes("\n") ? "\n" : " ",
+    );
+    normalized = normalized.replace(/\n{3,}/g, "\n\n");
+
+    return normalized;
+}
+export function string_splitter(str: string, max_length: number = maxMessageLength): Array<string> {
     const words = str.split(/(\W+)/g);
 
     const lines: string[] = [];
@@ -687,7 +705,7 @@ export function showSecondsResolution(duration: moment.Duration | null): string 
     } else if (duration < moment.duration(60000)) {
         return `${moment.duration(duration).asSeconds().toFixed(1)}s`;
     } else {
-        return moment.duration(duration).format("d:h:m:s");
+        return moment.duration(duration).format("d:hh:mm:ss");
     }
 }
 

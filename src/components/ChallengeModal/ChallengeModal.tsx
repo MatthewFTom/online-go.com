@@ -72,6 +72,7 @@ import {
     RejectionDetails,
     UpdateFn,
 } from "@/components/ChallengeModal/ChallengeModal.types";
+import "./ChallengeModal.css";
 
 /* Constants  */
 
@@ -92,6 +93,42 @@ const standard_board_sizes: { [k: string]: string | undefined } = {
     "19x9": "19x9",
     "5x13": "5x13",
 };
+
+function isRankedBotBoardSize(width: number | null, height: number | null): boolean {
+    return (
+        (width === 19 && height === 19) ||
+        (width === 13 && height === 13) ||
+        (width === 9 && height === 9)
+    );
+}
+
+function computeBotRanked(
+    game: Pick<GameInput, "private" | "width" | "height" | "handicap" | "komi_auto">,
+): boolean {
+    return (
+        !game.private &&
+        isRankedBotBoardSize(game.width, game.height) &&
+        game.handicap <= 9 &&
+        game.komi_auto === "automatic"
+    );
+}
+
+// Auto-sets `ranked` for bot challenges based on whether the game looks like
+// a normal ranked game. User-controlled fields (handicap, komi, etc.) are
+// left alone - picking unusual values just flips `ranked` to false.
+function applyBotRanked(game: GameInput): GameInput {
+    return { ...game, ranked: computeBotRanked(game) };
+}
+
+// The backend's handicap calculator ignores requested_komi when the handicap
+// is automatic (<0), so in the UI we keep komi in lockstep: auto handicap =>
+// auto komi.
+function coerceKomiForAutoHandicap(game: GameInput): GameInput {
+    if (game.handicap < 0) {
+        return { ...game, komi_auto: "automatic", komi: undefined };
+    }
+    return game;
+}
 
 export class ChallengeModal extends Modal<{}, ChallengeModalProperties, ChallengeModalState> {
     constructor(props: ChallengeModalProperties) {
@@ -226,6 +263,12 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
             }
         }
 
+        state.challenge.game = coerceKomiForAutoHandicap(state.challenge.game);
+        if (this.props.mode === "computer") {
+            state.challenge.game = applyBotRanked(state.challenge.game);
+            state.challenge.game.disable_analysis = false;
+        }
+
         if (this.props.autoCreate) {
             setTimeout(() => {
                 this.createChallenge();
@@ -320,7 +363,24 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
         const next = this.next();
         saveTimeControlSettings(this.state.time_control);
         const speed = data.get("challenge.speed", "live");
-        data.set(`challenge.challenge.${speed}`, next.challenge);
+
+        let challenge_to_save = next.challenge;
+        if (this.props.mode === "computer") {
+            // ranked and disable_analysis are forced in bot mode, so don't let
+            // them overwrite the user's persisted preference used by other modes.
+            const persisted: any = data.get(`challenge.challenge.${speed}`);
+            challenge_to_save = {
+                ...next.challenge,
+                game: {
+                    ...next.challenge.game,
+                    ranked: persisted?.game?.ranked ?? next.challenge.game.ranked,
+                    disable_analysis:
+                        persisted?.game?.disable_analysis ?? next.challenge.game.disable_analysis,
+                },
+            };
+        }
+
+        data.set(`challenge.challenge.${speed}`, challenge_to_save);
         data.set("challenge.bot", next.conf.bot_id);
         data.set("challenge.restrict_rank", next.conf.restrict_rank);
     }
@@ -475,7 +535,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
             player_id = conf.bot_id;
 
             if (!player_id) {
-                player_id = bot_count() === 0 ? 0 : one_bot()?.id ?? 0;
+                player_id = bot_count() === 0 ? 0 : (one_bot()?.id ?? 0);
             }
 
             console.log("Bot set to ", player_id);
@@ -653,7 +713,13 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
         this.update_game_settings((prev) => ({ ...prev, name: name }));
 
     update_private = (isPrivate: boolean) =>
-        this.update_game_settings((prev) => ({ ...prev, private: isPrivate, ranked: false }));
+        this.update_game_settings((prev) => {
+            const next = { ...prev, private: isPrivate };
+            if (this.props.mode === "computer") {
+                return applyBotRanked(next);
+            }
+            return { ...next, ranked: false };
+        });
 
     update_invite_only = (invite_only: boolean) => {
         this.update_challenge_settings((prev) => ({ ...prev, invite_only: invite_only }));
@@ -709,10 +775,22 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
     };
 
     update_board_width = (width: number | null) =>
-        this.update_game_settings((prev) => ({ ...prev, width: width }));
+        this.update_game_settings((prev) => {
+            const next = { ...prev, width: width };
+            if (this.props.mode === "computer") {
+                return applyBotRanked(next);
+            }
+            return next;
+        });
 
     update_board_height = (height: number | null) =>
-        this.update_game_settings((prev) => ({ ...prev, height: height }));
+        this.update_game_settings((prev) => {
+            const next = { ...prev, height: height };
+            if (this.props.mode === "computer") {
+                return applyBotRanked(next);
+            }
+            return next;
+        });
 
     update_rules = (rules: string) => {
         if (!isRuleSet(rules)) {
@@ -721,7 +799,13 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
         this.update_game_settings((prev) => ({ ...prev, rules: rules }));
     };
     update_handicap = (handicap: number) =>
-        this.update_game_settings((prev) => ({ ...prev, handicap: handicap }));
+        this.update_game_settings((prev) => {
+            const next = coerceKomiForAutoHandicap({ ...prev, handicap: handicap });
+            if (this.props.mode === "computer") {
+                return applyBotRanked(next);
+            }
+            return next;
+        });
 
     update_komi_option = (komi_option: string) => {
         if (!isKomiOption(komi_option)) {
@@ -732,21 +816,23 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
             const changedToCustom =
                 komi_option === "custom" && prev.challenge.game.komi_auto !== "custom";
 
+            const nextGame = {
+                ...prev.challenge.game,
+                komi_auto: komi_option,
+                // If we just switched to custom komi, set it to the default for the current
+                // rules.
+                ...(changedToCustom && {
+                    komi: getDefaultKomi(
+                        prev.challenge.game.rules,
+                        prev.challenge.game.handicap > 0,
+                    ),
+                }),
+            };
+
             return {
                 challenge: {
                     ...prev.challenge,
-                    game: {
-                        ...prev.challenge.game,
-                        komi_auto: komi_option,
-                        // If we just switched to custom komi, set it to the default for the current
-                        // rules.
-                        ...(changedToCustom && {
-                            komi: getDefaultKomi(
-                                prev.challenge.game.rules,
-                                prev.challenge.game.handicap > 0,
-                            ),
-                        }),
-                    },
+                    game: this.props.mode === "computer" ? applyBotRanked(nextGame) : nextGame,
                 },
             };
         });
@@ -940,7 +1026,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                                         }
                                     />
                                     <a
-                                        href="https://forums.online-go.com/t/how-does-rengo-work-at-ogs/42484"
+                                        href="https://github.com/online-go/online-go.com/wiki/Rengo"
                                         className="help"
                                         target="_blank"
                                     >
@@ -1033,6 +1119,8 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
 
     handicapSettings = () => {
         const game = this.gameState();
+        // In bot mode, users can pick any handicap; ranked auto-flips to false.
+        const restrict_ranked_only = game.ranked && this.props.mode !== "computer";
         return (
             <div className="form-group" id="challenge.game.handicap-group">
                 <label className="control-label">{_("Handicap")}</label>
@@ -1052,7 +1140,11 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                             </option>
                             <option value="0">{_("None")}</option>
                             {handicapRanges.map((n, idx) => (
-                                <option key={idx} value={n} disabled={n > 9 && game.ranked}>
+                                <option
+                                    key={idx}
+                                    value={n}
+                                    disabled={n > 9 && restrict_ranked_only}
+                                >
                                     {n}
                                 </option>
                             ))}
@@ -1065,6 +1157,12 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
 
     komiSettings = () => {
         const game = this.gameState();
+        // In bot mode, users can pick custom komi; ranked auto-flips to false.
+        const restrict_ranked_only = game.ranked && this.props.mode !== "computer";
+        // Auto handicap forces auto komi - the backend handicap calculator
+        // ignores requested_komi in the auto-handicap branch.
+        const auto_handicap = game.handicap < 0;
+        const disable_custom_komi = restrict_ranked_only || auto_handicap;
         return (
             <>
                 <div className="form-group">
@@ -1078,7 +1176,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                                 id="challenge-komi"
                             >
                                 <option value="automatic">{_("Automatic")}</option>
-                                <option value="custom" disabled={game.ranked}>
+                                <option value="custom" disabled={disable_custom_komi}>
                                     {_("Custom")}
                                 </option>
                             </select>
@@ -1116,7 +1214,9 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                 className="right-pane pane form-horizontal"
                 role="form"
             >
-                {!this.state.forking_game && this.rankedSettings()}
+                {!this.state.forking_game &&
+                    this.props.mode !== "computer" &&
+                    this.rankedSettings()}
                 {!this.state.forking_game && this.boardSizeSettings()}
             </div>
         );
@@ -1124,7 +1224,8 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
 
     boardSizeSettings = () => {
         const conf = this.state.conf;
-        const enable_custom_board_sizes = !this.state.challenge.game.ranked;
+        const enable_custom_board_sizes =
+            this.props.mode === "computer" || !this.state.challenge.game.ranked;
 
         return (
             <>
@@ -1297,24 +1398,29 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                     </div>
 
                     <div>
-                        <div className="form-group" style={{ position: "relative" }}>
-                            <label className="control-label" htmlFor="challenge-disable-analysis">
-                                {_("Disable Analysis")}
-                            </label>
-                            <div className="controls">
-                                <div className="checkbox">
-                                    <input
-                                        checked={game.disable_analysis}
-                                        onChange={(ev) =>
-                                            this.update_disable_analysis(ev.target.checked)
-                                        }
-                                        id="challenge-disable-analysis"
-                                        type="checkbox"
-                                    />{" "}
-                                    *
+                        {mode !== "computer" && (
+                            <div className="form-group" style={{ position: "relative" }}>
+                                <label
+                                    className="control-label"
+                                    htmlFor="challenge-disable-analysis"
+                                >
+                                    {_("Disable Analysis")}
+                                </label>
+                                <div className="controls">
+                                    <div className="checkbox">
+                                        <input
+                                            checked={game.disable_analysis}
+                                            onChange={(ev) =>
+                                                this.update_disable_analysis(ev.target.checked)
+                                            }
+                                            id="challenge-disable-analysis"
+                                            type="checkbox"
+                                        />{" "}
+                                        *
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {mode === "open" && (
                             <div>
@@ -1401,9 +1507,17 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                                 )}
                             </div>
                         )}
-                        <div style={{ marginTop: "1.0em", textAlign: "right", fontSize: "0.8em" }}>
-                            * {_("Also disables conditional moves")}
-                        </div>
+                        {mode !== "computer" && (
+                            <div
+                                style={{
+                                    marginTop: "1.0em",
+                                    textAlign: "right",
+                                    fontSize: "0.8em",
+                                }}
+                            >
+                                * {_("Also disables conditional moves")}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
@@ -1476,7 +1590,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                 <hr />
                 <div className="preferred-settings-container">
                     <div style={{ display: "flex", gap: "1em", alignItems: "center" }}>
-                        <div style={{ flex: 1 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                             <Select
                                 classNamePrefix="ogs-react-select"
                                 value={selected}
@@ -1535,13 +1649,13 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
             {
                 sort_index: 2,
                 label: pgettext("Bot strength category", "Intermediate"),
-                lower_bound: 11,
+                lower_bound: 10,
                 upper_bound: 25,
             },
             {
-                sort_index: 2,
+                sort_index: 3,
                 label: pgettext("Bot strength category", "Advanced"),
-                lower_bound: 26,
+                lower_bound: 25,
                 upper_bound: 99,
             },
         ];
@@ -1579,7 +1693,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
             for (const category of categories) {
                 if (
                     b.ranking &&
-                    b.ranking >= category.lower_bound &&
+                    b.ranking > category.lower_bound &&
                     b.ranking <= category.upper_bound
                 ) {
                     b.category = category;
@@ -1629,12 +1743,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                             <div key={category.upper_bound} className="bot-options">
                                 {available_bots
                                     //.filter((bot) => !bot.disabled)
-                                    .filter(
-                                        (bot) => bot.ranking && bot.ranking >= category.lower_bound,
-                                    )
-                                    .filter(
-                                        (bot) => bot.ranking && bot.ranking <= category.upper_bound,
-                                    )
+                                    .filter((bot) => bot.category === category)
                                     .map((bot) => {
                                         return (
                                             <div
@@ -1797,8 +1906,7 @@ export class ChallengeModalBody extends React.Component<ChallengeModalInput, Cha
                         </button>
                     )}
                 </div>
-                {(mode !== "computer" || this.state.show_computer_settings) &&
-                    this.preferredGameSettings()}
+                {mode !== "computer" && this.preferredGameSettings()}
             </div>
         );
     }

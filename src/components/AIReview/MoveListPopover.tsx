@@ -17,48 +17,81 @@
 
 import * as React from "react";
 import { useGobanController } from "@/views/Game/goban_context";
+import { _, interpolate } from "@/lib/translate";
+import { FullReviewButton } from "./FullReviewButton";
 
 interface MoveListPopoverProps {
     moves: number[];
     category: string;
     color: "black" | "white";
+    openingMoves: Set<number>;
     onClose: () => void;
+    showFullReviewPrompt?: boolean;
+    onStartFullReview?: () => void;
+    showBecomeSupporterText?: boolean;
 }
 
 export function MoveListPopover({
     moves,
     category,
     color,
+    openingMoves,
     onClose,
+    showFullReviewPrompt,
+    onStartFullReview,
+    showBecomeSupporterText,
 }: MoveListPopoverProps): React.ReactElement {
     const goban_controller = useGobanController();
-    return (
-        <div className="category-move-popover">
-            <div className="category-move-header">
-                <span>{`${category} Moves (${color})`}</span>
-                <button className="close-button" onClick={onClose}>
-                    <i className="fa fa-times" />
-                </button>
-            </div>
-            <div className="category-move-content">
-                {moves.length > 0 ? (
-                    <div className="move-numbers">
-                        {moves.map((move) => (
+
+    const renderContent = () => {
+        if (showFullReviewPrompt && onStartFullReview) {
+            return (
+                <FullReviewButton
+                    onStartFullReview={onStartFullReview}
+                    showBecomeSupporterText={showBecomeSupporterText}
+                />
+            );
+        }
+
+        if (moves.length > 0) {
+            return (
+                <div className="move-numbers">
+                    {moves.map((move) => {
+                        const isOpening = openingMoves.has(move);
+                        return (
                             <span
                                 key={move}
-                                className="move-number"
+                                className={`move-number${isOpening ? " opening" : ""}`}
+                                title={isOpening ? _("Opening") : undefined}
                                 onClick={() => {
                                     goban_controller.gotoMove(move - 1);
                                 }}
                             >
                                 {move}
                             </span>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="no-moves">No moves in this category</div>
-                )}
+                        );
+                    })}
+                </div>
+            );
+        }
+
+        return <div className="no-moves">{_("No moves in this category")}</div>;
+    };
+
+    return (
+        <div className={`category-move-popover popover-${category.toLowerCase()}`}>
+            <div className="category-move-header">
+                <span>
+                    {interpolate(_("{{category}} Moves ({{color}})"), {
+                        category: _(category),
+                        color: _(color),
+                    })}
+                </span>
+                <button className="close-button" onClick={onClose}>
+                    <i className="fa fa-times" />
+                </button>
             </div>
+            <div className="category-move-content">{renderContent()}</div>
         </div>
     );
 }

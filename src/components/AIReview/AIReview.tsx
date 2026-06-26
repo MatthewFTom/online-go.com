@@ -24,17 +24,11 @@ import { openBecomeASiteSupporterModal } from "@/views/Supporter";
 import { errorAlerter, errorLogger } from "@/lib/misc";
 import { toast } from "@/lib/toast";
 import { post } from "@/lib/requests";
-import { _ } from "@/lib/translate";
+import { _, pgettext, moment } from "@/lib/translate";
 import { ReviewChart } from "./ReviewChart";
 import { SummaryTable } from "./SummaryTable";
-import {
-    MoveTree,
-    JGOFAIReview,
-    JGOFAIReviewMove,
-    DEFAULT_SCORE_DIFF_THRESHOLDS,
-    ScoreDiffThresholds,
-    ColoredCircle,
-} from "goban";
+import { FairPlayGameSummary } from "@moderator-ui/FairPlay";
+import { MoveTree, JGOFAIReview, JGOFAIReviewMove, ColoredCircle, GobanMovesArray } from "goban";
 import { alert } from "@/lib/swal_config";
 import { useGobanControllerOrNull } from "@/views/Game/goban_context";
 import { MODERATOR_POWERS } from "@/lib/moderation";
@@ -43,13 +37,8 @@ import { MODERATOR_POWERS } from "@/lib/moderation";
 import { ReviewSelector } from "./ReviewSelector";
 import { WorstMovesList } from "./WorstMovesList";
 import { ScoreWinRateToggle } from "./ScoreWinRateToggle";
-import {
-    powerToSeeTable,
-    canStartFullReview,
-    canRequestVariationAnalysis,
-    trimMaxMoves,
-    fillAIMarksBacktracking,
-} from "./utils";
+import { FullReviewButton } from "./FullReviewButton";
+import { canStartFullReview, trimMaxMoves, fillAIMarksBacktracking } from "./utils";
 import { useAIReviewData, useAIReviewList, useWorstMoves } from "./hooks";
 
 // Constants
@@ -59,6 +48,7 @@ const COMPOSITE_KEY_MULTIPLIER = 1000000;
 
 import { generateHeatmapAndMarks } from "./generateHeatmapAndMarks";
 import { Errcode } from "@/components/Errcode";
+import "./AIReview.css";
 
 export interface AIReviewEntry {
     move_number: number;
@@ -72,6 +62,18 @@ interface AIReviewProperties {
     game_id: number;
     hidden: boolean;
     onAIReviewSelected: (ai_review: JGOFAIReview) => void;
+    simul_black?: boolean | null;
+    simul_white?: boolean | null;
+    /** When true, shows GameTimings within FairPlayGameSummary */
+    showGameTimings?: boolean;
+    /** GameTimings props - required when showGameTimings is true */
+    moves?: GobanMovesArray;
+    start_time?: number;
+    end_time?: number;
+    free_handicap_placement?: boolean;
+    handicap?: number;
+    /** Callback for when GameTimings calculates the final action time */
+    onFinalActionCalculated?: (final_action_timing: moment.Duration) => void;
 }
 
 /**
@@ -80,18 +82,26 @@ interface AIReviewProperties {
  * handles real-time updates via WebSocket, and provides interactive visualization
  * of AI-suggested variations.
  */
-export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReviewProperties) {
+export function AIReview({
+    move,
+    game_id,
+    hidden,
+    onAIReviewSelected,
+    simul_black,
+    simul_white,
+    showGameTimings,
+    moves,
+    start_time,
+    end_time,
+    free_handicap_placement,
+    handicap,
+    onFinalActionCalculated,
+}: AIReviewProperties) {
     const gobanController = useGobanControllerOrNull();
 
     // State management
     const [useScore, setUseScore] = useState(preferences.get("ai-review-use-score"));
-    const [showTable, setShowTable] = useState(false);
     const [tableHidden, setTableHidden] = useState(!preferences.get("ai-summary-table-show"));
-    const [scoreDiffThresholds, setScoreDiffThresholds] = useState<ScoreDiffThresholds>(() => {
-        const current = preferences.get("ai-review-score-diff-thresholds") || {};
-        return { ...DEFAULT_SCORE_DIFF_THRESHOLDS, ...current };
-    });
-    const [includeNegativeScoreLoss, setIncludeNegativeScoreLoss] = useState(false);
     const [currentPopupMoves, setCurrentPopupMoves] = useState<number[]>([]);
 
     const {
@@ -111,6 +121,7 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
     } = useAIReviewData({
         gameId: game_id,
         moveTree: gobanController?.goban?.engine?.move_tree,
+        currentMove: move,
     });
 
     // Sync the initially selected review to AIReviewData
@@ -125,10 +136,6 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
 
     // Get user and permissions
     const user = data.get("user");
-    const canViewTable = useMemo(
-        () => user.is_moderator || powerToSeeTable(user.moderator_powers),
-        [user.is_moderator, user.moderator_powers],
-    );
 
     const showFullReviewButton = useMemo(
         () =>
@@ -138,20 +145,14 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
         [user, gobanController, gobanController?.creator_id, gobanController?.goban],
     );
 
-    // Initialize table visibility
-    useEffect(() => {
-        setShowTable(canViewTable);
-    }, [canViewTable]);
-
     // Handle AI review selection
     const handleAIReviewSelect = useCallback(
         (ai_review: JGOFAIReview) => {
             setSelectedAiReviewInList(ai_review);
             setSelectedAIReviewData(ai_review);
             onAIReviewSelected(ai_review);
-            setShowTable(canViewTable);
         },
-        [setSelectedAiReviewInList, setSelectedAIReviewData, onAIReviewSelected, canViewTable],
+        [setSelectedAiReviewInList, setSelectedAIReviewData, onAIReviewSelected],
     );
 
     // Sync AI review data when reviewData or selectedAiReview changes
@@ -228,12 +229,8 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
             return;
         }
 
-        reviewData.categorize(
-            gobanController.goban.engine,
-            scoreDiffThresholds,
-            includeNegativeScoreLoss,
-        );
-    }, [gobanController, reviewData, scoreDiffThresholds, includeNegativeScoreLoss]);
+        reviewData.categorize(gobanController.goban.engine);
+    }, [gobanController, reviewData]);
 
     // State for win rate and score from highlights update
     const [winRateScore, setWinRateScore] = useState<[number, number]>([0, 0]);
@@ -395,7 +392,7 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
                 return false;
             }
 
-            if (!canRequestVariationAnalysis(user, gobanController.goban, gobanController)) {
+            if (!user.supporter_level) {
                 return false;
             }
 
@@ -411,30 +408,6 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
         },
         [gobanController, reviewData, selectedAiReview, user, game_id],
     );
-
-    // Handle threshold changes
-    const handleThresholdChange = useCallback(
-        (category: string, value: number) => {
-            setScoreDiffThresholds((prev) => {
-                const updated = { ...prev, [category]: value };
-                preferences.set("ai-review-score-diff-thresholds", updated);
-                return updated;
-            });
-            calculateAndUpdateTableData();
-        },
-        [calculateAndUpdateTableData],
-    );
-
-    const handleResetThresholds = useCallback(() => {
-        preferences.set("ai-review-score-diff-thresholds", DEFAULT_SCORE_DIFF_THRESHOLDS);
-        setScoreDiffThresholds({ ...DEFAULT_SCORE_DIFF_THRESHOLDS });
-        calculateAndUpdateTableData();
-    }, [calculateAndUpdateTableData]);
-
-    const handleToggleNegativeScores = useCallback(() => {
-        setIncludeNegativeScoreLoss((prev) => !prev);
-        calculateAndUpdateTableData();
-    }, [calculateAndUpdateTableData]);
 
     // Calculate worst moves using the custom hook
     // Include updateCount to recalculate when review data updates
@@ -459,10 +432,8 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
 
     // Update table data when dependencies change
     useEffect(() => {
-        if (showTable) {
-            calculateAndUpdateTableData();
-        }
-    }, [showTable, calculateAndUpdateTableData]);
+        calculateAndUpdateTableData();
+    }, [calculateAndUpdateTableData]);
 
     // Prepare data for rendering
     const [win_rate, score] = winRateScore;
@@ -486,6 +457,10 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
     const show_become_supporter_text =
         !user.anonymous && !user.supporter && !user.is_moderator && !user.professional;
 
+    const userIsPlayer =
+        user.id === gobanController?.goban?.engine?.config?.black_player_id ||
+        user.id === gobanController?.goban?.engine?.config?.white_player_id;
+
     // Early returns for critical missing data
     if (!gobanController?.goban?.engine || !move) {
         return null;
@@ -497,6 +472,15 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
 
     // Handle hidden or no review data states
     if (!reviewData || hidden) {
+        // Still render GameTimings via FairPlayGameSummary if showGameTimings is true
+        // All CMs (anyone with moderator_powers) can see GameTimings
+        const canShowTimings =
+            !hidden &&
+            showGameTimings &&
+            (user.is_moderator || (user.moderator_powers ?? 0) !== 0) &&
+            gobanController?.goban?.engine?.config?.black_player_id &&
+            gobanController?.goban?.engine?.config?.white_player_id;
+
         return (
             <div className="AIReview">
                 <UIPush
@@ -509,6 +493,23 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
                         <span>{_("Queuing AI review")}</span>
                         <i className="fa fa-desktop slowstrobe"></i>
                     </div>
+                )}
+                {canShowTimings && (
+                    <FairPlayGameSummary
+                        game_id={game_id}
+                        black_player_id={gobanController.goban!.engine.config.black_player_id!}
+                        white_player_id={gobanController.goban!.engine.config.white_player_id!}
+                        board_size={gobanController.goban!.engine.width}
+                        currentMoveNumber={move.move_number - 1}
+                        moves={moves}
+                        start_time={start_time}
+                        end_time={end_time}
+                        free_handicap_placement={free_handicap_placement}
+                        handicap={handicap}
+                        simul_black={simul_black}
+                        simul_white={simul_white}
+                        onFinalActionCalculated={onFinalActionCalculated}
+                    />
                 )}
             </div>
         );
@@ -573,58 +574,81 @@ export function AIReview({ move, game_id, hidden, onAIReviewSelected }: AIReview
                                 <ScoreWinRateToggle
                                     useScore={useScore}
                                     onUseScoreChange={setUseScore}
-                                    canViewTable={canViewTable}
                                     tableHidden={tableHidden}
                                     onTableHiddenChange={setTableHidden}
                                     showTableToggle={reviewData?.engine.includes("katago")}
                                 />
                             )}
 
-                            {canViewTable && reviewData?.engine.includes("katago") && (
-                                <div>
+                            {reviewData?.engine.includes("katago") &&
+                                gobanController?.goban?.engine && (
                                     <SummaryTable
                                         categorization={reviewData?.categorize(
                                             gobanController.goban.engine,
-                                            scoreDiffThresholds,
-                                            includeNegativeScoreLoss,
                                         )}
-                                        reviewType={reviewData.type === "fast" ? "fast" : "full"}
                                         table_hidden={tableHidden}
-                                        scoreDiffThresholds={scoreDiffThresholds}
-                                        onThresholdChange={handleThresholdChange}
-                                        onResetThresholds={handleResetThresholds}
-                                        includeNegativeScores={includeNegativeScoreLoss}
-                                        onToggleNegativeScores={handleToggleNegativeScores}
                                         onPopupMovesChange={(moves) => {
                                             setCurrentPopupMoves(moves);
                                         }}
+                                        isFastReview={reviewData.type === "fast"}
+                                        onStartFullReview={() => startNewAIReview("full", "katago")}
+                                        showBecomeSupporterText={show_become_supporter_text}
+                                        userIsPlayer={userIsPlayer}
                                     />
+                                )}
+
+                            {(simul_black || simul_white) && (
+                                <div className="simul-warning">
+                                    {pgettext(
+                                        "A label that means the game is played at the same time as another game",
+                                        "Simul",
+                                    )}
+                                    {simul_black && simul_white
+                                        ? " (both players)"
+                                        : simul_black
+                                          ? " (black)"
+                                          : " (white)"}
                                 </div>
                             )}
-                        </React.Fragment>
-                    )}
 
-                    {reviewData?.type === "fast" && showFullReviewButton && (
-                        <div className="key-moves">
-                            <div>
-                                <button
-                                    className="primary"
-                                    onClick={() => startNewAIReview("full", "katago")}
-                                >
-                                    {_("Full AI Review")}
-                                </button>
-                                {show_become_supporter_text && (
-                                    <div
-                                        className="fakelink become-a-site-supporter-line"
-                                        onClick={() => startNewAIReview("full", "katago")}
-                                    >
-                                        {_(
-                                            "Become a site supporter today for in-depth interactive AI reviews",
-                                        )}
-                                    </div>
+                            {reviewData?.type === "fast" && showFullReviewButton && (
+                                <FullReviewButton
+                                    onStartFullReview={() => startNewAIReview("full", "katago")}
+                                    showBecomeSupporterText={show_become_supporter_text}
+                                />
+                            )}
+
+                            {/* All CMs (anyone with moderator_powers) can see GameTimings via FairPlayGameSummary */}
+                            {(!tableHidden || showGameTimings) &&
+                                (user.is_moderator || (user.moderator_powers ?? 0) !== 0) &&
+                                gobanController?.goban?.engine?.config?.black_player_id &&
+                                gobanController?.goban?.engine?.config?.white_player_id && (
+                                    <FairPlayGameSummary
+                                        game_id={game_id}
+                                        black_player_id={
+                                            gobanController.goban!.engine.config.black_player_id
+                                        }
+                                        white_player_id={
+                                            gobanController.goban!.engine.config.white_player_id
+                                        }
+                                        board_size={gobanController.goban!.engine.width}
+                                        currentMoveNumber={move.move_number - 1}
+                                        moves={showGameTimings ? moves : undefined}
+                                        start_time={showGameTimings ? start_time : undefined}
+                                        end_time={showGameTimings ? end_time : undefined}
+                                        free_handicap_placement={
+                                            showGameTimings ? free_handicap_placement : undefined
+                                        }
+                                        handicap={showGameTimings ? handicap : undefined}
+                                        simul_black={showGameTimings ? simul_black : undefined}
+                                        simul_white={showGameTimings ? simul_white : undefined}
+                                        ai_review_uuid={selectedAiReview?.uuid}
+                                        onFinalActionCalculated={
+                                            showGameTimings ? onFinalActionCalculated : undefined
+                                        }
+                                    />
                                 )}
-                            </div>
-                        </div>
+                        </React.Fragment>
                     )}
                 </React.Fragment>
             )}

@@ -42,6 +42,8 @@ interface CachedSchema {
     blocks: any /* /me/blocks */;
     friends: any /* ui/friends */;
     group_invitations: any /* me/groups/invitations */;
+    friend_invitations: rest_api.FriendInvitations /* me/friends/invitations */;
+    tournament_invitations: rest_api.me.TournamentInvitation[] /* me/tournaments/invitations */;
 }
 
 export interface DismissableMessagesSchema {
@@ -71,6 +73,14 @@ export interface ConfigSchema {
     incident_auth: string;
     dismissable_messages: DismissableMessagesSchema;
     payment_problems?: PaymentProblems;
+    last_game?: Record<string, unknown>;
+    whats_new?: WhatsNewConfig;
+}
+
+export interface WhatsNewConfig {
+    id: number;
+    timestamp: string;
+    title: Record<string, string>;
 }
 
 interface PaymentMethodDetails {
@@ -217,7 +227,8 @@ type Prefixed<T, P extends string> = {
  * during prototyping), one can use a key that starts with an underscore.
  */
 export interface DataSchema
-    extends Prefixed<CachedSchema, "cached">,
+    extends
+        Prefixed<CachedSchema, "cached">,
         Prefixed<ConfigSchema, "config">,
         Prefixed<ChatSchema, "chat">,
         Prefixed<SoundSchema, "sound">,
@@ -247,6 +258,42 @@ export interface DataSchema
     "table-color-default-on": boolean;
     "oje-url": string;
     "oje-variation-filter": JosekiFilter;
+    "fair-play.last-game-id": string;
+    "fair-play.last-action-game-id": string;
+    "fair-play.last-player-id": string;
+    "fair-play.past-n-games": string;
+    "fair-play.game-logic-mode": string;
+    "fair-play.selected-phase": string;
+    "fair-play.selected-tags": number[];
+    "fair-play.vim-mode": boolean;
+    "fair-play.skip-archiving": boolean;
+    "fair-play-search.filters": {
+        selectedPlayerId?: number;
+        selectedPlayerUsername?: string;
+        gameId: string;
+        fromDate: string;
+        toDate: string;
+        reviewType: "" | "fast" | "full";
+        filters: Array<{
+            field: string;
+            fieldType: "aggregate" | "flag";
+            operator: "" | "__gt" | "__gte" | "__lt" | "__lte";
+            value: string;
+        }>;
+        selectedTags?: number[];
+    };
+    "fair-play-search.hidden-fields": string[];
+    "fair-play-search.hidden-stats": Array<"mean" | "median" | "p95" | "stdDev" | "min" | "max">;
+    "fair-play-search.show-statistics": boolean;
+    "fair-play-actions.filters": {
+        selectedPlayerId?: number;
+        selectedPlayerUsername?: string;
+        fromDate: string;
+        toDate: string;
+        stateFilter: "pending" | "executed" | "denied" | "error" | "";
+        pendingOnly: boolean;
+        excludedActionTypes: Array<"request_full_review" | "warn" | "suspend" | "report" | "annul">;
+    };
     "ad-override": boolean;
     "email-banner-dismissed": boolean;
     "payment-problem-banner-dismissed-timestamp": number;

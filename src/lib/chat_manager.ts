@@ -29,8 +29,21 @@ import { bounded_rank } from "@/lib/rank_utils";
 import { ActiveTournamentList, GroupList } from "@/lib/types";
 import { _, interpolate } from "@/lib/translate";
 import { getBlocks } from "@/components/BlockPlayer";
-import { insert_into_sorted_list, string_splitter, n2s, Timeout } from "@/lib/misc";
+import {
+    insert_into_sorted_list,
+    maxMessageLength,
+    sanitizeMessage,
+    string_splitter,
+    n2s,
+    Timeout,
+} from "@/lib/misc";
 import { User } from "goban";
+
+export interface TypedChatBody {
+    type: string;
+    name?: string;
+    text?: string;
+}
 
 export interface ChatMessage {
     channel: string;
@@ -43,7 +56,7 @@ export interface ChatMessage {
     message: {
         i?: string; // uuid;
         t: number; // epoch in seconds
-        m: string; // the text
+        m: string | TypedChatBody; // text, or a typed body (e.g. analysis, system)
     };
     system_message_type?: "flood";
     system?: boolean; // true if it's a system message
@@ -82,6 +95,7 @@ interface Events {
     "chat-removed": any;
     join: Array<any>;
     part: any;
+    "user-metadata-update": { user: User; previous_user: User };
     "unread-count-changed": any;
 }
 
@@ -222,32 +236,19 @@ export function resolveChannelDisplayName(channel: string): string {
         return global_channels_by_id[channel]?.name ?? channel;
     }
     if (channel.startsWith("global-")) {
-        global_channels.forEach((element): string | void => {
-            if (channel === element.id) {
-                return element.name;
-            }
-            return;
-        });
+        return global_channels.find((element) => channel === element.id)?.name ?? channel;
     } else if (channel.startsWith("tournament-")) {
         const id: number = parseInt(channel.substring(11));
-        tournament_channels.forEach((element): string | void => {
-            if (id === element.id) {
-                return element.name;
-            }
-            return;
-        });
+        return tournament_channels.find((element) => id === element.id)?.name ?? channel;
     } else if (channel.startsWith("group-")) {
         const id: number = parseInt(channel.substring(6));
-        group_channels.forEach((element): string | void => {
-            if (id === element.id) {
-                return element.name;
-            }
-            return;
-        });
+        return group_channels.find((element) => id === element.id)?.name ?? channel;
     } else if (channel.startsWith("game-")) {
         return interpolate(_("Game {{number}}"), { number: channel.substring(5) }); // eslint-disable-line id-denylist
     } else if (channel.startsWith("review-")) {
         return interpolate(_("Review {{number}}"), { number: channel.substring(7) }); // eslint-disable-line id-denylist
+    } else if (channel.startsWith("kibitz-")) {
+        return channel_information_cache[channel]?.name ?? channel.substring(7);
     }
     return "<error>";
 }
@@ -336,6 +337,7 @@ class ChatChannel extends TypedEventEmitter<Events> {
     user_list: { [k: string]: User } = {};
     users_by_rank: User[] = [];
     users_by_name: User[] = [];
+    users_by_join: User[] = [];
     user_count = 0;
     rtl_mode = false;
     last_seen_timestamp: number;
@@ -537,6 +539,7 @@ class ChatChannel extends TypedEventEmitter<Events> {
             if (!(user.id in this.user_list)) {
                 this.user_count++;
                 this._insert_into_sorted_lists(user);
+                this.users_by_join.push(user);
             }
             this.user_list[user.id] = user;
         }
@@ -551,6 +554,9 @@ class ChatChannel extends TypedEventEmitter<Events> {
         if (user.id in this.user_list) {
             this.user_count--;
             this._remove_from_sorted_lists(user);
+            this.users_by_join = this.users_by_join.filter(
+                (existing_user) => existing_user.id !== user.id,
+            );
             delete this.user_list[user.id];
         }
 
@@ -563,7 +569,21 @@ class ChatChannel extends TypedEventEmitter<Events> {
     handleUserUpdate(_old_player_id: number, user: User): void {
         if (user.id in this.user_list) {
             const old_entry = this.user_list[user.id];
-            this.handlePart(old_entry);
+            this.user_list[user.id] = user;
+            this.users_by_join = this.users_by_join.map((existing_user) =>
+                existing_user.id === user.id ? user : existing_user,
+            );
+            this._remove_from_sorted_lists(old_entry);
+            this._insert_into_sorted_lists(user);
+            try {
+                this.emit("user-metadata-update", {
+                    user,
+                    previous_user: old_entry,
+                });
+            } catch (e) {
+                console.error(e);
+            }
+            return;
         }
         this.handleJoins([user]);
     }
@@ -588,7 +608,8 @@ class ChatChannel extends TypedEventEmitter<Events> {
     }
 
     public send(text: string): void {
-        if (text.length > 300) {
+        text = sanitizeMessage(text);
+        if (text.length > maxMessageLength) {
             for (const split_str of string_splitter(text)) {
                 this.send(split_str);
             }
@@ -667,6 +688,31 @@ class ChatChannel extends TypedEventEmitter<Events> {
             professional: user.professional,
             ui_class: user.ui_class,
             message: { i: _send_obj.uuid, t: Math.floor(Date.now() / 1000), m: text },
+        };
+        this.chat_log.push(obj);
+        if (obj.message.i) {
+            this.chat_ids[obj.message.i] = true;
+        } else {
+            console.error("Chat message missing uuid: ", obj);
+        }
+        this.emit("chat", obj);
+    }
+    public sendTypedBody(body: TypedChatBody): void {
+        const user = data.get("config.user");
+        const send_obj = {
+            channel: this.channel,
+            uuid: chatSoftUid(user.id),
+            message: body,
+        };
+        socket.send("chat/send", send_obj);
+        const obj: ChatMessage = {
+            channel: send_obj.channel,
+            username: user.username,
+            id: user.id,
+            ranking: user.ranking,
+            professional: user.professional,
+            ui_class: user.ui_class,
+            message: { i: send_obj.uuid, t: Math.floor(Date.now() / 1000), m: body },
         };
         this.chat_log.push(obj);
         if (obj.message.i) {
@@ -768,6 +814,7 @@ export class ChatChannelProxy extends TypedEventEmitter<Events> {
         this.channel.on("topic", this._onTopic);
         this.channel.on("join", this._onJoin);
         this.channel.on("part", this._onPart);
+        this.channel.on("user-metadata-update", this._onUserMetadataUpdate);
         this.channel.on("chat-removed", this._onChatRemoved);
         this.channel.on("unread-count-changed", this._onUnreadChanged);
     }
@@ -788,6 +835,12 @@ export class ChatChannelProxy extends TypedEventEmitter<Events> {
     _onPart = (...args: any[]) => {
         this.emit.apply(this, ["part", args]);
     };
+    _onUserMetadataUpdate = (update?: { user: User; previous_user: User }) => {
+        if (!update) {
+            return;
+        }
+        this.emit("user-metadata-update", update);
+    };
     _onChatRemoved = (...args: any[]) => {
         this.emit.apply(this, ["chat-removed", args]);
     };
@@ -799,6 +852,7 @@ export class ChatChannelProxy extends TypedEventEmitter<Events> {
         this.channel.off("topic", this._onTopic);
         this.channel.off("join", this._onJoin);
         this.channel.off("part", this._onPart);
+        this.channel.off("user-metadata-update", this._onUserMetadataUpdate);
         this.channel.off("chat-removed", this._onChatRemoved);
         this.channel.off("unread-count-changed", this._onUnreadChanged);
         this.removeAllListeners();
@@ -958,6 +1012,10 @@ export function resolveChannelInformation(channel: string): Promise<ChannelInfor
         if (m) {
             ret.tournament_id = parseInt(m[1]);
         }
+    }
+
+    if (channel.startsWith("kibitz-")) {
+        ret.name = resolveChannelDisplayName(channel);
     }
 
     if (ret.group_id) {

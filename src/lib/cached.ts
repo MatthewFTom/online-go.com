@@ -20,6 +20,7 @@ import * as data from "@/lib/data";
 import { get } from "@/lib/requests";
 import ITC from "@/lib/ITC";
 import * as player_cache from "@/lib/player_cache";
+import { get_browser_timezone } from "@/lib/browser_timezone";
 
 /**
  * This is a set of keys to be used for data.get(..) and data.watch(..) calls.
@@ -45,10 +46,16 @@ export const cached = {
     blocks: "cached.blocks",
     challenge_list: "cached.challenge_list",
     group_invitations: "cached.group_invitations",
+    friend_invitations: "cached.friend_invitations",
+    tournament_invitations: "cached.tournament_invitations",
 
     refresh: {
         config: (cb?: () => void) => {
-            get("ui/config")
+            // Pass the browser-detected IANA tz so Django can keep
+            // Player.timezone fresh without requiring the user to update
+            // their settings page. Server-side this is best-effort —
+            // ignored when missing/invalid/unchanged.
+            get("ui/config", { timezone: get_browser_timezone() })
                 .then((config) => {
                     if (config.banned) {
                         data.set("appeals.banned_user_id", config.banned.banned_user_id);
@@ -81,7 +88,7 @@ export const cached = {
                     disable_refresh_callback_on_user_change = false;
                 })
                 .catch((err) => {
-                    console.error("Error retrieving friends list: ", err);
+                    console.error("Error retrieving config: ", err);
                 });
         },
 
@@ -138,6 +145,36 @@ export const cached = {
                 })
                 .catch((err) => {
                     console.error("Error retrieving friends list: ", err);
+                });
+        },
+
+        friend_invitations: () => {
+            if (anon()) {
+                data.set(cached.friend_invitations, []);
+                return;
+            }
+
+            get("me/friends/invitations/")
+                .then((invitations: rest_api.FriendInvitations) => {
+                    data.set(cached.friend_invitations, invitations);
+                })
+                .catch((err) => {
+                    console.error("Error retrieving friend invitations: ", err);
+                });
+        },
+
+        tournament_invitations: () => {
+            if (anon()) {
+                data.set(cached.tournament_invitations, []);
+                return;
+            }
+
+            get("me/tournaments/invitations", { page_size: 100 })
+                .then((res) => {
+                    data.set(cached.tournament_invitations, res.results);
+                })
+                .catch((err) => {
+                    console.error("Error retrieving tournament invitations: ", err);
                 });
         },
 
@@ -243,10 +280,12 @@ data.watch("user", (user) => {
 });
 
 push_manager.on("update-friend-list", cached.refresh.friends);
+push_manager.on("update-friend-list", cached.refresh.friend_invitations);
 push_manager.on("challenge-list-updated", cached.refresh.challenge_list);
 push_manager.on("update-groups", cached.refresh.groups);
 push_manager.on("update-groups", cached.refresh.group_invitations);
 push_manager.on("update-tournaments", cached.refresh.active_tournaments);
+push_manager.on("update-tournaments", cached.refresh.tournament_invitations);
 
 ITC.register("update-blocks", cached.refresh.blocks);
 

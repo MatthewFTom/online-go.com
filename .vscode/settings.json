@@ -1,9 +1,9 @@
 {
-    "stylusSupremacy.ignoreFiles": ["src/ogs.styl"],
-    "stylusSupremacy.tabStopChar": "    ",
-    "stylusSupremacy.alwaysUseExtends": true,
-    "[stylus]": {
-        "editor.formatOnSave": false
+  "files.eol": "\n",
+  "eslint.run": "onSave",
+  "eslint.workingDirectories": [{ "mode": "auto" }],
+  "eslint.validate": ["javascript", "javascriptreact", "typescript", "typescriptreact"],
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
     }
-    
 }

@@ -13,6 +13,7 @@ import { expect } from "@playwright/test";
 import { Page } from "@playwright/test";
 import { expectOGSClickableByName } from "@helpers/matchers";
 import { openUserDropdownFromOmniSearch } from "./user-utils";
+import { log } from "./logger";
 
 type checkboxTest = boolean | "none"; // None means "not present at all"
 
@@ -237,19 +238,26 @@ export const createDirectChallenge = async (
 
     // Send the challenge
     await page.getByRole("button", { name: "Send Challenge" }).click();
-    await expect(page.getByText("Waiting for opponent")).toBeVisible();
+
+    if (settings.speed === "correspondence") {
+        // Correspondence direct challenges show a "Challenge sent!" alert
+        // (ChallengeModal.tsx:631-635) rather than the live "Waiting for
+        // opponent" spinner. Dismiss the alert so the challenger's page
+        // is interactable for follow-up navigation.
+        await expect(page.getByText("Challenge sent!")).toBeVisible();
+        const ok = await expectOGSClickableByName(page, /^OK$/);
+        await ok.click();
+    } else {
+        await expect(page.getByText("Waiting for opponent")).toBeVisible();
+    }
 };
 
 export const acceptDirectChallenge = async (page: Page) => {
     await page.goto("/");
 
-    // Click skip button if present
-    const skipButton = page.getByRole("button", { name: /skip/i });
-    if (await skipButton.isVisible()) {
-        await skipButton.click();
-    }
-
-    await page.locator(".fab.primary.raiser").click();
+    // The Home screen shows incoming challenges inline with Accept/Decline buttons
+    const acceptButton = await expectOGSClickableByName(page, /Accept/);
+    await acceptButton.click();
 };
 
 // Fill out the challenge form with the given settings.
@@ -329,6 +337,11 @@ export const fillOutChallengeForm = async (
             await page.selectOption("#challenge-komi", { value: "custom" });
             await page.fill("#challenge-komi-value", final_settings.komi.toString());
         }
+    }
+
+    if (final_settings.disable_analysis !== undefined) {
+        const checkbox = page.locator("#challenge-disable-analysis");
+        await checkbox.setChecked(final_settings.disable_analysis);
     }
 
     if (final_settings.rengo !== undefined) {
@@ -522,7 +535,7 @@ export const testChallengePOSTPayload = async (
         const requestBody = JSON.parse(request.postData() || "{}");
 
         if (options.logRequestBody) {
-            console.log("Challenge POST payload:", JSON.stringify(requestBody, null, 2));
+            log("Challenge POST payload:", JSON.stringify(requestBody, null, 2));
         }
 
         checkForUnexpectedFields(requestBody, "ChallengePOSTPayload");
@@ -632,6 +645,50 @@ export const reloadChallengeModal = async (page: Page) => {
     await expect(page.locator(".header")).toContainText("Custom Game");
 };
 
+// Create an invite-only challenge and submit it to the server
+// Returns after the challenge has been created successfully
+export const createInviteOnlyChallenge = async (page: Page, settings: ChallengeModalFields) => {
+    await page.goto("/play");
+
+    // The "Explore custom games" button might need to be clicked on first visit,
+    // but on subsequent visits the section may already be expanded.
+    // Check if "Create a custom game" is already visible.
+    const createGameButton = page
+        .getByRole("button", { name: "Create a custom game" })
+        .or(page.getByRole("link", { name: "Create a custom game" }));
+
+    const isCreateVisible = await createGameButton.isVisible().catch(() => false);
+
+    if (!isCreateVisible) {
+        // Need to expand the custom games section first
+        const customGames = await expectOGSClickableByName(page, "Explore custom games");
+        await customGames.click();
+    }
+
+    // Now click "Create a custom game"
+    const createButton = await expectOGSClickableByName(page, "Create a custom game");
+    await createButton.click();
+
+    await expect(page.locator(".header")).toContainText("Custom Game");
+
+    // Invite-only requires unranked
+    const finalSettings = {
+        ...settings,
+        ranked: false,
+        invite_only: true,
+    };
+
+    await fillOutChallengeForm(page, finalSettings);
+
+    // Click the create button to actually submit
+    const submitButton = await expectOGSClickableByName(page, "Create Game");
+    await submitButton.click();
+
+    // Wait for the modal to close and challenge to be created
+    // The modal should disappear after successful creation
+    await expect(page.locator(".ChallengeModal")).not.toBeVisible({ timeout: 10000 });
+};
+
 export const testDemoBoardPOSTPayload = async (
     page: Page,
     expectedPayload: DemoBoardPOSTPayload,
@@ -642,7 +699,7 @@ export const testDemoBoardPOSTPayload = async (
         const requestBody = JSON.parse(request.postData() || "{}");
 
         if (options.logRequestBody) {
-            console.log("Demo POST payload:", JSON.stringify(requestBody, null, 2));
+            log("Demo POST payload:", JSON.stringify(requestBody, null, 2));
         }
 
         checkForUnexpectedFields(requestBody, "DemoBoardPOSTPayload");

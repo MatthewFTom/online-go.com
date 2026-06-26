@@ -196,6 +196,77 @@ import { BL3FalseEye1 } from "./Sections/BeginnerLevel3/FalseEye1";
 import { BL3FalseEye2 } from "./Sections/BeginnerLevel3/FalseEye2";
 import { BL3FalseEye3 } from "./Sections/BeginnerLevel3/FalseEye3";
 import { BL3FalseEye4 } from "./Sections/BeginnerLevel3/FalseEye4";
+import { BL3LifeDeath1 } from "./Sections/BeginnerLevel3/LifeDeath1";
+import { BL3LifeDeath2 } from "./Sections/BeginnerLevel3/LifeDeath2";
+import { BL3LifeDeath3 } from "./Sections/BeginnerLevel3/LifeDeath3";
+import { BL3LifeDeath4 } from "./Sections/BeginnerLevel3/LifeDeath4";
+import { BL3LifeDeath5 } from "./Sections/BeginnerLevel3/LifeDeath5";
+import { BL3LifeDeath6 } from "./Sections/BeginnerLevel3/LifeDeath6";
+import { BL3LifeDeath7 } from "./Sections/BeginnerLevel3/LifeDeath7";
+import { BL3LifeDeath8 } from "./Sections/BeginnerLevel3/LifeDeath8";
+import { BL3LifeDeath9 } from "./Sections/BeginnerLevel3/LifeDeath9";
+import { BL3LifeDeath10 } from "./Sections/BeginnerLevel3/LifeDeath10";
+import { BL3LifeDeath11 } from "./Sections/BeginnerLevel3/LifeDeath11";
+import { BL3LifeDeath12 } from "./Sections/BeginnerLevel3/LifeDeath12";
+import { BL3LifeDeath13 } from "./Sections/BeginnerLevel3/LifeDeath13";
+import { BL3LifeDeath14 } from "./Sections/BeginnerLevel3/LifeDeath14";
+import { BL3LifeDeath15 } from "./Sections/BeginnerLevel3/LifeDeath15";
+import { BL3LifeDeath16 } from "./Sections/BeginnerLevel3/LifeDeath16";
+import { BL3LifeDeath17 } from "./Sections/BeginnerLevel3/LifeDeath17";
+import { BL3LifeDeath18 } from "./Sections/BeginnerLevel3/LifeDeath18";
+import { BL3CapturingRace1 } from "./Sections/BeginnerLevel3/CapturingRace1";
+import { BL3CapturingRace2 } from "./Sections/BeginnerLevel3/CapturingRace2";
+import { BL3CapturingRace3 } from "./Sections/BeginnerLevel3/CapturingRace3";
+import { BL3CapturingRace4 } from "./Sections/BeginnerLevel3/CapturingRace4";
+import { BL3CapturingRace5 } from "./Sections/BeginnerLevel3/CapturingRace5";
+import { BL3CapturingRace6 } from "./Sections/BeginnerLevel3/CapturingRace6";
+import { BL3CapturingRace7 } from "./Sections/BeginnerLevel3/CapturingRace7";
+import { BL3CapturingRace8 } from "./Sections/BeginnerLevel3/CapturingRace8";
+import { BL3PreparatoryAtari1 } from "./Sections/BeginnerLevel3/PreparatoryAtari1";
+import { BL3PreparatoryAtari2 } from "./Sections/BeginnerLevel3/PreparatoryAtari2";
+import { BL3PreparatoryAtari3 } from "./Sections/BeginnerLevel3/PreparatoryAtari3";
+import { BL3PreparatoryAtari4 } from "./Sections/BeginnerLevel3/PreparatoryAtari4";
+import { BL3ConnectCut1 } from "./Sections/BeginnerLevel3/ConnectCut1";
+import { BL3ConnectCut2 } from "./Sections/BeginnerLevel3/ConnectCut2";
+import { BL3ConnectCut3 } from "./Sections/BeginnerLevel3/ConnectCut3";
+import { BL3ConnectCut4 } from "./Sections/BeginnerLevel3/ConnectCut4";
+import { BL3ConnectCut5 } from "./Sections/BeginnerLevel3/ConnectCut5";
+import { BL3ConnectCut6 } from "./Sections/BeginnerLevel3/ConnectCut6";
+import { BL3ConnectCut7 } from "./Sections/BeginnerLevel3/ConnectCut7";
+import { BL4Opening1 } from "./Sections/BeginnerLevel4/Opening1";
+import { BL4Opening2 } from "./Sections/BeginnerLevel4/Opening2";
+import { BL4Opening3 } from "./Sections/BeginnerLevel4/Opening3";
+import { BL4Opening4 } from "./Sections/BeginnerLevel4/Opening4";
+import { BL4Opening5 } from "./Sections/BeginnerLevel4/Opening5";
+import { BL4Opening6 } from "./Sections/BeginnerLevel4/Opening6";
+import { BL4Opening7 } from "./Sections/BeginnerLevel4/Opening7";
+import { BL4Opening8 } from "./Sections/BeginnerLevel4/Opening8";
+import { BL4Opening9 } from "./Sections/BeginnerLevel4/Opening9";
+import { BL4Joseki1 } from "./Sections/BeginnerLevel4/Joseki1";
+import { BL4Joseki2 } from "./Sections/BeginnerLevel4/Joseki2";
+import { BL4Skills1 } from "./Sections/BeginnerLevel4/Skills1";
+import { BL4Skills2 } from "./Sections/BeginnerLevel4/Skills2";
+import { BL4Skills3 } from "./Sections/BeginnerLevel4/Skills3";
+import { BL4Skills4 } from "./Sections/BeginnerLevel4/Skills4";
+import { BL4Capture1 } from "./Sections/BeginnerLevel4/Capture1";
+import { BL4Capture2 } from "./Sections/BeginnerLevel4/Capture2";
+import { BL4Capture3 } from "./Sections/BeginnerLevel4/Capture3";
+import { BL4Capture4 } from "./Sections/BeginnerLevel4/Capture4";
+import { BL4Connect1 } from "./Sections/BeginnerLevel4/Connect1";
+import { BL4Connect2 } from "./Sections/BeginnerLevel4/Connect2";
+import { BL4Connect3 } from "./Sections/BeginnerLevel4/Connect3";
+import { BL4Connect4 } from "./Sections/BeginnerLevel4/Connect4";
+import { BL4Cut1 } from "./Sections/BeginnerLevel4/Cut1";
+import { BL4Cut2 } from "./Sections/BeginnerLevel4/Cut2";
+import { BL4CapturingRace1 } from "./Sections/BeginnerLevel4/CapturingRace1";
+import { BL4CapturingRace2 } from "./Sections/BeginnerLevel4/CapturingRace2";
+import { BL4CapturingRace3 } from "./Sections/BeginnerLevel4/CapturingRace3";
+import { BL4CapturingRace4 } from "./Sections/BeginnerLevel4/CapturingRace4";
+import { BL4CapturingRace5 } from "./Sections/BeginnerLevel4/CapturingRace5";
+import { BL4CapturingRace6 } from "./Sections/BeginnerLevel4/CapturingRace6";
+import { BL4CapturingRace7 } from "./Sections/BeginnerLevel4/CapturingRace7";
+import { BL4CapturingRace8 } from "./Sections/BeginnerLevel4/CapturingRace8";
+import { BL4CapturingRace9 } from "./Sections/BeginnerLevel4/CapturingRace9";
 
 export const sections: [string, any[]][] = [
     [
@@ -395,6 +466,82 @@ export const sections: [string, any[]][] = [
             BL3FalseEye2,
             BL3FalseEye3,
             BL3FalseEye4,
+            BL3LifeDeath1,
+            BL3LifeDeath2,
+            BL3LifeDeath3,
+            BL3LifeDeath4,
+            BL3LifeDeath5,
+            BL3LifeDeath6,
+            BL3LifeDeath7,
+            BL3LifeDeath8,
+            BL3LifeDeath9,
+            BL3LifeDeath10,
+            BL3LifeDeath11,
+            BL3LifeDeath12,
+            BL3LifeDeath13,
+            BL3LifeDeath14,
+            BL3LifeDeath15,
+            BL3LifeDeath16,
+            BL3LifeDeath17,
+            BL3LifeDeath18,
+            BL3CapturingRace1,
+            BL3CapturingRace2,
+            BL3CapturingRace3,
+            BL3CapturingRace4,
+            BL3CapturingRace5,
+            BL3CapturingRace6,
+            BL3CapturingRace7,
+            BL3CapturingRace8,
+            BL3PreparatoryAtari1,
+            BL3PreparatoryAtari2,
+            BL3PreparatoryAtari3,
+            BL3PreparatoryAtari4,
+            BL3ConnectCut1,
+            BL3ConnectCut2,
+            BL3ConnectCut3,
+            BL3ConnectCut4,
+            BL3ConnectCut5,
+            BL3ConnectCut6,
+            BL3ConnectCut7,
+        ],
+    ],
+    [
+        pgettext("Learning hub section title", "Beginner Level 4"),
+        [
+            BL4Opening1,
+            BL4Opening2,
+            BL4Opening3,
+            BL4Opening4,
+            BL4Opening5,
+            BL4Opening6,
+            BL4Opening7,
+            BL4Opening8,
+            BL4Opening9,
+            BL4Joseki1,
+            BL4Joseki2,
+            BL4Skills1,
+            BL4Skills2,
+            BL4Skills3,
+            BL4Skills4,
+            BL4Capture1,
+            BL4Capture2,
+            BL4Capture3,
+            BL4Capture4,
+            BL4Connect1,
+            BL4Connect2,
+            BL4Connect3,
+            BL4Connect4,
+            BL4Cut1,
+            BL4Cut2,
+            BL4CapturingRace1,
+            BL4CapturingRace2,
+            BL4CapturingRace3,
+            BL4CapturingRace4,
+            BL4CapturingRace5,
+            BL4CapturingRace6,
+            BL4CapturingRace7,
+            BL4CapturingRace8,
+            BL4CapturingRace9,
         ],
     ],
 

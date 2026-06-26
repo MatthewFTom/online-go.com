@@ -33,6 +33,7 @@ interface ModerateUserProperties {
 
 import { alert } from "@/lib/swal_config";
 import { ModerationOfferControl } from "@/components/ModerationOfferControl";
+import "./ModerateUser.css";
 
 const pro_ranks = proRankList(false);
 
@@ -458,6 +459,19 @@ export class ModerateUser extends Modal<Events, ModerateUserProperties, any> {
                                     "AI detection team",
                                 )}
                                 ability_mask={MODERATOR_POWERS.AI_DETECTOR}
+                                currently_offered={this.state.offered_moderator_powers}
+                                moderator_powers={this.state.moderator_powers}
+                                previously_rejected={this.state.mod_powers_rejected}
+                                onMakeOffer={this.makeOffer}
+                                onRetractOffer={this.retractOffer}
+                                onRemovePower={this.removePower}
+                            />
+                            <ModerationOfferControl
+                                ability={pgettext(
+                                    "Label for a button to let a community moderator handle sandbagging",
+                                    "Handle Sandbagging",
+                                )}
+                                ability_mask={MODERATOR_POWERS.HANDLE_SANDBAGGING}
                                 currently_offered={this.state.offered_moderator_powers}
                                 moderator_powers={this.state.moderator_powers}
                                 previously_rejected={this.state.mod_powers_rejected}

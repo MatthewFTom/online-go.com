@@ -41,11 +41,12 @@ export const defaults = {
         Inaccuracy: 2.0,
         Mistake: 5.0,
     },
-    "ai-summary-table-show": false,
+    "ai-summary-table-show": true,
     "always-disable-analysis": false,
     "asked-to-enable-desktop-notifications": false,
     "auto-advance-after-submit": true,
     "autofocus-submit-button": false,
+    "accessibility.keyboard-coordinate-input": false,
     "autoplay-delay": 10000,
     "play.tab": "automatch" as "automatch" | "custom",
     "automatch.size": "9x9" as Size,
@@ -82,6 +83,7 @@ export const defaults = {
     "dock-delay": 0, // seconds.
     "double-click-submit-correspondence": false,
     "double-click-submit-live": false,
+    "fuzzy-stone-placement": false,
     "last-move-opacity": 1.0,
     "variation-stone-opacity": 0.6,
     "variation-move-count": 10,
@@ -126,6 +128,7 @@ export const defaults = {
     "profanity-filter": { en: true } as { [cc: string]: true },
     "puzzle.randomize.color": true,
     "puzzle.randomize.transform": true,
+    "puzzle.sound": true,
     "puzzle.zoom": true,
     "rating-graph-always-use": false,
     "rating-graph-plot-by-games": false,
@@ -205,6 +208,8 @@ export const defaults = {
 
     "game-history-size-filter": "all",
     "game-history-ranked-filter": "all",
+    "game-history-bot-filter": "humans" as "humans" | "bots",
+    "game-history-annulled-filter": "all" as "all" | "hide",
 
     "help-system-enabled": true,
 
@@ -228,11 +233,33 @@ export const defaults = {
     "user-history.warnings-only": false,
     "debug.test-wanted": false,
     "learning-hub-expanded-section": "Fundamentals",
+    "learning-hub-auto-advance": false,
 
     "bot.challenge-level": 2 as 1 | 2 | 3,
     "bot.slug": "" as string,
     "bot.color": "random" as "random" | "white" | "black",
     "bot.last-selected-id": undefined as string | number | undefined,
+
+    "home-show-SupporterProblems": true,
+    "home-show-PriceIncreaseMessage": true,
+    "home-show-FreeTrialBanner": true,
+    "home-show-FreeTrialSurvey": true,
+    "home-show-DismissableMessages": true,
+    "home-show-EmailBanner": true,
+    "home-show-PaymentProblemBanner": true,
+    "home-show-ActiveAnnouncements": true,
+    "home-show-ModerationOffer": true,
+    "home-show-ChallengesList": true,
+    "home-show-InviteList": true,
+    "home-show-ActiveDroppedGameList": true,
+    "home-show-ProfileCard": true,
+    "home-show-WhatsNewBanner": true,
+    "home-show-TournamentList": true,
+    "home-show-LadderList": true,
+    "home-show-GroupList": true,
+    "home-show-HomeFriendList": true,
+    "home-show-PlayButtons": true,
+    "home-show-GameCount": false,
 };
 
 defaults["profanity-filter"][current_language] = true;

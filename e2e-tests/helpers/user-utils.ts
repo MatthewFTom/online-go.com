@@ -10,10 +10,11 @@
  */
 
 import { expect } from "@playwright/test";
-import { Page, Browser } from "@playwright/test";
+import { Page, BrowserContext, Locator } from "@playwright/test";
 
 import { expectOGSClickableByName } from "./matchers";
-import { load } from "@helpers";
+import { load, CreateContextOptions } from "@helpers";
+import { log } from "./logger";
 
 /**
  * User Management Utilities for E2E Tests
@@ -62,54 +63,59 @@ import { load } from "@helpers";
 // a decent number of readable user-role characters, within the OGS username 30 character limit
 // on registration.
 export const newTestUsername = (user_role: string) => {
-    if (user_role.length > 21) {
-        throw new Error("user_role must be less than 22 characters");
+    if (user_role.length > 20) {
+        throw new Error("user_role must be 20 characters or less");
     }
     const timestamp = Date.now().toString(36);
     // Using 5 chars provides uniqueness roughly every 1.3 seconds
     // This allows re-running tests with <10 second intervals
     const midChars = timestamp.slice(-7, -2);
-    return `e2e${user_role}_${midChars}`;
+    // Include worker index to prevent username collisions in parallel execution
+    const workerIndex = process.env.TEST_WORKER_INDEX || "0";
+    return `e2e${user_role}_${midChars}${workerIndex}`;
 };
 
 // Counter for same-millisecond IPv6 generation
 let ipv6Counter = 0;
 
-// Generate unique IPv6 addresses for test users using timestamp + counter
+// Generate unique IPv6 addresses for test users using timestamp + counter + worker index
 // Similar approach to newTestUsername - timestamp ensures uniqueness across test runs
-// without needing shared state files
+// Worker index ensures uniqueness across parallel workers
 export const generateUniqueTestIPv6 = (): string => {
     const timestamp = Date.now().toString(16); // Use hex (base-16) for valid IPv6
     const counter = (ipv6Counter++).toString(16).padStart(4, "0");
+    const workerIndex = parseInt(process.env.TEST_WORKER_INDEX || "0", 10)
+        .toString(16)
+        .padStart(1, "0");
 
     // Use fd00::/8 private IPv6 range for testing
     // IPv6 segments must be 4 hex chars max, so split 8-char timestamp into two segments
-    // Format: fd00:e2e::abcd:1234:0001 where abcd:1234 is the timestamp
-    // Example: fd00:e2e::12ab:34cd:0001
+    // Format: fd00:e2e:W::abcd:1234:0001 where W is worker, abcd:1234 is timestamp
+    // Example: fd00:e2e:1::12ab:34cd:0001
     const timestampHex = timestamp.slice(-8).padStart(8, "0");
     const seg1 = timestampHex.slice(0, 4);
     const seg2 = timestampHex.slice(4, 8);
-    return `fd00:e2e::${seg1}:${seg2}:${counter}`;
+    return `fd00:e2e:${workerIndex}::${seg1}:${seg2}:${counter}`;
 };
 
-export const registerNewUser = async (browser: Browser, username: string, password: string) => {
+export const registerNewUser = async (
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
+    username: string,
+    password: string,
+) => {
     const uniqueIPv6 = generateUniqueTestIPv6();
-    const userContext = await browser.newContext({
+    const userContext = await createContext({
         extraHTTPHeaders: {
             "X-Forwarded-For": uniqueIPv6,
         },
     });
     const userPage = await userContext.newPage();
     await userPage.goto("/");
-    // Go from "landing page" to the "sign in" page.
-    await userPage.getByRole("link", { name: /sign in/i }).click();
+    // Go from "landing page" to the "Register" page.
+    await userPage.getByRole("link", { name: /Register/i }).click();
+    await expect(userPage.getByText("Welcome new player!")).toBeVisible();
     await expect(userPage.getByLabel("Username")).toBeVisible();
     await expect(userPage.getByLabel("Password")).toBeVisible();
-    await expectOGSClickableByName(userPage, /Sign in$/);
-
-    // From there to "Register"
-    const registerPageButton = await expectOGSClickableByName(userPage, /Register here!/);
-    await registerPageButton.click();
 
     // Fill in registration form
     await userPage.getByLabel("Username").fill(username);
@@ -118,12 +124,12 @@ export const registerNewUser = async (browser: Browser, username: string, passwo
     await registerButton.click();
 
     // Verify successful registration
-    await expect(userPage.getByText("Welcome")).toBeVisible();
+    // Wait for "Welcome!" to appear after registration and page reload (30s timeout)
+    // No networkidle wait needed - explicit UI state checks are more reliable
+    await expect(userPage.getByText("Welcome!")).toBeVisible({ timeout: 30000 });
 
     const userDropdown = userPage.locator(".username").getByText(username);
     await expect(userDropdown).toBeVisible();
-
-    await userPage.waitForLoadState("networkidle");
 
     return {
         userPage,
@@ -131,8 +137,18 @@ export const registerNewUser = async (browser: Browser, username: string, passwo
     };
 };
 
-export const prepareNewUser = async (browser: Browser, username: string, password: string) => {
-    const { userPage, userContext } = await registerNewUser(browser, username, password);
+export const prepareNewUser = async (
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
+    username: string,
+    password: string,
+) => {
+    const { userPage, userContext } = await registerNewUser(createContext, username, password);
+
+    // Wait for the rank chooser component to be fully rendered after page load
+    // This ensures React has finished initial rendering before we try to interact with buttons
+    await expect(userPage.getByText("What is your Go skill level?")).toBeVisible({
+        timeout: 10000,
+    });
 
     // We need to choose _something_ to get rid of this on the Profile page:
     // typically, we don't want to see that.
@@ -140,9 +156,14 @@ export const prepareNewUser = async (browser: Browser, username: string, passwor
     const chooseButton = await expectOGSClickableByName(userPage, /^Basic/);
     await chooseButton.click();
 
-    await expect(userPage.getByText("You're not currently playing any games")).toBeVisible();
+    await expect(userPage.locator("#Home")).toBeVisible();
 
     await turnOffDynamicHelp(userPage); // the popups can get in the way.
+
+    // Prevent desktop notification prompts from appearing during tests
+    await userPage.evaluate(() => {
+        localStorage.setItem("ogs.preferences.asked-to-enable-desktop-notifications", "true");
+    });
 
     await load(userPage, "/");
 
@@ -165,7 +186,6 @@ export const goToProfile = async (userPage: Page) => {
     await profileLink.click();
 
     await expect(userPage.getByText("Ratings")).toBeVisible();
-    await userPage.waitForLoadState("networkidle");
     await userPage.mouse.move(0, 0); // Move mouse away to ensure menu closes
 };
 
@@ -185,7 +205,9 @@ export const logoutUser = async (page: Page) => {
 export const loginAsUser = async (page: Page, username: string, password: string) => {
     await page.goto("/sign-in");
 
-    await page.waitForLoadState("networkidle");
+    // Wait for sign-in form to be visible
+    await expect(page.getByLabel("Username")).toBeVisible({ timeout: 10000 });
+
     const isUserLoggedIn = await page
         .locator('.username:has-text("${username}")')
         .isVisible({ timeout: 0 });
@@ -198,8 +220,8 @@ export const loginAsUser = async (page: Page, username: string, password: string
     await page.getByLabel("Password").fill(password);
     await page.getByRole("button", { name: /Sign in$/ }).click();
 
-    await page.waitForLoadState("networkidle");
-    await expect(page.locator(".username").getByText(username)).toBeVisible();
+    // Wait for login to complete by checking for username in header (backend can be slow)
+    await expect(page.locator(".username").getByText(username)).toBeVisible({ timeout: 30000 });
 
     // Save the authenticated state for Playwright
     await page.context().storageState({ path: "playwright/.auth/user.json" });
@@ -207,12 +229,14 @@ export const loginAsUser = async (page: Page, username: string, password: string
 
 export const turnOffDynamicHelp = async (page: Page) => {
     await page.goto("/settings/help");
-    await page.waitForLoadState("networkidle");
+
+    // Wait for the preference line to be visible
+    const parentElement = page.locator('div.PreferenceLine:has-text("Show dynamic help")');
+    await expect(parentElement).toBeVisible({ timeout: 10000 });
+
     const switchElement = page.locator(
         'div.PreferenceLine:has-text("Show dynamic help") input[role="switch"]',
     );
-    const parentElement = page.locator('div.PreferenceLine:has-text("Show dynamic help")');
-    await expect(parentElement).toBeVisible();
     const isSwitchOn = await switchElement.evaluate((el) => (el as HTMLInputElement).checked);
     if (isSwitchOn) {
         await parentElement.click();
@@ -222,9 +246,12 @@ export const turnOffDynamicHelp = async (page: Page) => {
 // actually you could set up any user using this but its unusual to need to log in
 // a newly registered user.
 
-export const setupSeededUser = async (browser: Browser, username: string) => {
+export const setupSeededUser = async (
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
+    username: string,
+) => {
     const uniqueIPv6 = generateUniqueTestIPv6();
-    const userContext = await browser.newContext({
+    const userContext = await createContext({
         extraHTTPHeaders: {
             "X-Forwarded-For": uniqueIPv6,
         },
@@ -239,9 +266,12 @@ export const setupSeededUser = async (browser: Browser, username: string) => {
     };
 };
 
-export const setupSeededCM = async (browser: Browser, username: string) => {
+export const setupSeededCM = async (
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
+    username: string,
+) => {
     const uniqueIPv6 = generateUniqueTestIPv6();
-    const seededCMContext = await browser.newContext({
+    const seededCMContext = await createContext({
         extraHTTPHeaders: {
             "X-Forwarded-For": uniqueIPv6,
         },
@@ -255,6 +285,30 @@ export const setupSeededCM = async (browser: Browser, username: string) => {
     return {
         seededCMPage,
         seededCMContext,
+    };
+};
+
+export const setupSeededModerator = async (
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
+) => {
+    const uniqueIPv6 = generateUniqueTestIPv6();
+    const seededModeratorContext = await createContext({
+        extraHTTPHeaders: {
+            "X-Forwarded-For": uniqueIPv6,
+        },
+    });
+    const seededModeratorPage = await seededModeratorContext.newPage();
+    // The moderator password is set from environment variable E2E_MODERATOR_PASSWORD
+    const moderatorPassword = process.env.E2E_MODERATOR_PASSWORD;
+    if (!moderatorPassword) {
+        throw new Error("E2E_MODERATOR_PASSWORD environment variable is not set");
+    }
+    await loginAsUser(seededModeratorPage, "E2E_MODERATOR", moderatorPassword);
+    await turnOffDynamicHelp(seededModeratorPage);
+
+    return {
+        seededModeratorPage,
+        seededModeratorContext,
     };
 };
 
@@ -275,7 +329,8 @@ export const openUserDropdownFromOmniSearch = async (page: Page, username: strin
     // Go to their profile where for sure there is their player link
     await goToUsersProfile(page, username);
 
-    const playerLink = page.locator(`a.Player:has-text("${username}")`);
+    // Use first() to avoid strict mode violations when multiple Player links exist on profile
+    const playerLink = page.locator(`a.Player:has-text("${username}")`).first();
     await expect(playerLink).toBeVisible();
     await playerLink.hover(); // Ensure the dropdown stays open
     await playerLink.click();
@@ -307,17 +362,68 @@ export const goToUsersFinishedGame = async (page: Page, username: string, gameNa
     // Go to that page ...
     await target_game.click();
     await expect(page.locator(".Game")).toBeVisible();
-    await page.waitForTimeout(500); // wait for the game components to finish loading
+    // Wait for Goban to be fully ready for interactions (replaces flaky waitForTimeout)
+    const gobanReady = page.locator(".Goban[data-pointers-bound]");
+    await gobanReady.waitFor({ state: "visible" });
 };
 
-export const reportUser = async (page: Page, username: string, type: string, notes: string) => {
-    const playerLink = page.locator(`a.Player:has-text("${username}")`);
-    await expect(playerLink).toBeVisible();
-    await playerLink.hover(); // Ensure the dropdown stays open
-    await playerLink.click();
+/**
+ * Click a Player link and open the PlayerDetails popover.
+ * Handles retry logic for race conditions where the popover doesn't appear.
+ * Exported for tests that need to open PlayerDetails without submitting a report.
+ */
+export const openPlayerDetailsPopover = async (page: Page, playerLinkLocator: Locator) => {
+    // Close any existing popovers first - their backdrop would block our click
+    await page.keyboard.press("Escape");
 
-    await expect(page.getByRole("button", { name: /Report$/ })).toBeVisible();
-    await page.getByRole("button", { name: /Report$/ }).click();
+    // Wait for the Player link to be visible and ready
+    await expect(playerLinkLocator).toBeVisible({ timeout: 15000 });
+
+    // Retry clicking the player link - in rare cases the popover still doesn't appear
+    // due to timing issues with popover backdrop or other race conditions
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+        attempts++;
+        await playerLinkLocator.click();
+
+        try {
+            // Wait for PlayerDetails popover to appear AND be fully loaded
+            await expect(page.locator('.PlayerDetails[data-ready="true"]')).toBeVisible({
+                timeout: 5000,
+            });
+            break; // Success
+        } catch {
+            if (attempts >= maxAttempts) {
+                throw new Error(
+                    `PlayerDetails popover did not appear after ${maxAttempts} click attempts`,
+                );
+            }
+            // Close any partial state and retry
+            await page.keyboard.press("Escape");
+            // Wait for popover to fully close before retrying
+            try {
+                await expect(page.locator(".PlayerDetails")).not.toBeVisible({ timeout: 1000 });
+            } catch {
+                // Popover may already be gone, that's fine
+            }
+        }
+    }
+};
+
+/**
+ * Internal helper to fill and submit the report form after PlayerDetails is open.
+ * Verifies the PlayerDetails popover is still visible before attempting to click Report.
+ */
+const submitReportForm = async (page: Page, type: string, notes: string) => {
+    // Verify popover is still open - it may have closed due to race conditions
+    await expect(
+        page.locator('.PlayerDetails[data-ready="true"]'),
+        "PlayerDetails popover should still be visible before clicking Report",
+    ).toBeVisible({ timeout: 2000 });
+
+    const reportButton = await expectOGSClickableByName(page, /Report$/);
+    await reportButton.click();
 
     await expect(page.getByText("Request Moderator Assistance")).toBeVisible();
 
@@ -336,35 +442,148 @@ export const reportUser = async (page: Page, username: string, type: string, not
     await expect(OK).toBeHidden();
 };
 
+export const reportUser = async (page: Page, username: string, type: string, notes: string) => {
+    const playerLink = page.locator(`a.Player[data-ready="true"]:has-text("${username}")`);
+
+    // Retry the entire open-popover-and-submit flow if the popover closes between steps
+    let attempts = 0;
+    const maxAttempts = 3;
+    let lastError: Error | null = null;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+        await openPlayerDetailsPopover(page, playerLink);
+
+        // Check if popover is still open before proceeding
+        const isPopoverOpen = await page
+            .locator('.PlayerDetails[data-ready="true"]')
+            .isVisible()
+            .catch(() => false);
+
+        if (isPopoverOpen) {
+            try {
+                await submitReportForm(page, type, notes);
+                return; // Success
+            } catch (e) {
+                // If the popover closed during submitReportForm, retry
+                const isPopoverError =
+                    e instanceof Error &&
+                    (e.message.includes("PlayerDetails") ||
+                        e.message.includes("not attached") ||
+                        e.message.includes("not visible"));
+                if (isPopoverError && attempts < maxAttempts) {
+                    lastError = e;
+                    // Close any partial state before retrying
+                    await page.keyboard.press("Escape");
+                    continue;
+                }
+                throw e;
+            }
+        }
+
+        if (attempts >= maxAttempts) {
+            throw (
+                lastError ||
+                new Error(
+                    `PlayerDetails popover closed before Report button could be clicked after ${maxAttempts} attempts`,
+                )
+            );
+        }
+    }
+};
+
+/**
+ * Capture the report number from the reporter's "My Own Reports" page.
+ * Reports are displayed oldest first in the UI, so we take the last one to get the most recent.
+ * Note: The displayed report number (e.g., "R092") is truncated to 3 digits for moderator convenience,
+ * but the full ID is stored in a data-report-id attribute.
+ * Returns the full report number (e.g., "R1123").
+ */
+export const captureReportNumber = async (reporterPage: Page): Promise<string> => {
+    await reporterPage.goto("/reports-center");
+    await expect(reporterPage.getByText("My Own Reports")).toBeVisible();
+    await reporterPage.getByText("My Own Reports").click();
+
+    // Wait for the reports to load - look for the incident container or report list
+    // This ensures the click was processed and content loaded before looking for specific report
+    await expect(
+        reporterPage.locator(".incident, .report-item, .PaginatedTable").first(),
+    ).toBeVisible({ timeout: 10000 });
+
+    // The report number is in a button with data-report-id attribute containing the full ID
+    const reportButtons = reporterPage.locator("button[data-report-id]");
+    await expect(reportButtons.first()).toBeVisible({ timeout: 30000 });
+
+    // Get the count to verify we have reports
+    const count = await reportButtons.count();
+    if (count === 0) {
+        throw new Error("No report numbers found in My Own Reports");
+    }
+
+    // Get the LAST report button (most recently created - reports are displayed oldest first)
+    // Read the full ID from data-report-id attribute
+    const fullReportId = await reportButtons.last().getAttribute("data-report-id");
+    if (!fullReportId || !fullReportId.match(/^\d+$/)) {
+        throw new Error(
+            `Failed to capture valid report ID from data attribute. Got: ${fullReportId}`,
+        );
+    }
+
+    const reportNumber = `R${fullReportId}`;
+    log(`Captured report number: ${reportNumber} (from ${count} total reports)`);
+    return reportNumber;
+};
+
+/**
+ * Navigate directly to a specific report by its report number.
+ * This works for any user who has permission to view the report.
+ */
+export const navigateToReport = async (page: Page, reportNumber: string) => {
+    // Extract the numeric ID from the report number (e.g., "R123" -> "123")
+    const reportId = reportNumber.replace(/^R/, "");
+
+    // Use /reports-center/all/{id} format which works for all permission levels
+    await page.goto(`/reports-center/all/${reportId}`);
+
+    // Verify we're on the correct page by checking URL and waiting for ViewReport content to load
+    await expect(page).toHaveURL(new RegExp(`/reports-center/all/${reportId}`), { timeout: 15000 });
+    // Wait for the ViewReport component to render (it has id="ViewReport")
+    await expect(page.locator("#ViewReport")).toBeVisible({ timeout: 15000 });
+    log(`Navigated to report ${reportNumber}`);
+};
+
 export const reportPlayerByColor = async (
     page: Page,
     color: string,
     type: string,
     notes: string,
 ) => {
-    const playerLink = page.locator(`${color}.player-name-container a.Player`);
-    await expect(playerLink).toBeVisible();
-    await playerLink.hover(); // Ensure the dropdown stays open
-    await playerLink.click();
+    const playerLink = page.locator(`${color}.player-name-container a.Player[data-ready="true"]`);
 
-    await expect(page.getByRole("button", { name: /Report$/ })).toBeVisible();
-    await page.getByRole("button", { name: /Report$/ }).click();
+    // Retry the entire open-popover-and-submit flow if the popover closes between steps
+    let attempts = 0;
+    const maxAttempts = 3;
+    while (attempts < maxAttempts) {
+        attempts++;
+        await openPlayerDetailsPopover(page, playerLink);
 
-    await expect(page.getByText("Request Moderator Assistance")).toBeVisible();
+        // Check if popover is still open before proceeding
+        const isPopoverOpen = await page
+            .locator('.PlayerDetails[data-ready="true"]')
+            .isVisible()
+            .catch(() => false);
 
-    await page.selectOption(".type-picker select", { value: type }); // cspell:disable-line
+        if (isPopoverOpen) {
+            await submitReportForm(page, type, notes);
+            return; // Success
+        }
 
-    const notesBox = page.locator(".notes");
-    await notesBox.fill(notes);
-
-    const submitButton = await expectOGSClickableByName(page, /Report User$/);
-    await submitButton.click();
-
-    await expect(page.getByText("Thanks for the report!")).toBeVisible();
-    const OK = await expectOGSClickableByName(page, "OK");
-    // tidy up
-    await OK.click();
-    await expect(OK).toBeHidden();
+        if (attempts >= maxAttempts) {
+            throw new Error(
+                `PlayerDetails popover closed before Report button could be clicked after ${maxAttempts} attempts`,
+            );
+        }
+    }
 };
 
 export const assertIncidentReportIndicatorActive = async (page: Page, count: number) => {
@@ -452,7 +671,7 @@ export const selectNavMenuItem = async (
  * Requires E2E_MODERATOR_PASSWORD environment variable to be set
  */
 export const banUserAsModerator = async (
-    browser: Browser,
+    createContext: (options?: CreateContextOptions) => Promise<BrowserContext>,
     targetUsername: string,
     banReason: string = "E2E test suspension",
 ) => {
@@ -464,7 +683,7 @@ export const banUserAsModerator = async (
     }
 
     const uniqueIPv6 = generateUniqueTestIPv6();
-    const modContext = await browser.newContext({
+    const modContext = await createContext({
         extraHTTPHeaders: {
             "X-Forwarded-For": uniqueIPv6,
         },
@@ -477,7 +696,8 @@ export const banUserAsModerator = async (
     await goToUsersProfile(modPage, targetUsername);
 
     // Click on the player link to open the dropdown menu
-    const playerLink = modPage.locator(`a.Player:has-text("${targetUsername}")`);
+    // Use first() to handle cases where multiple Player elements exist during page load
+    const playerLink = modPage.locator(`a.Player:has-text("${targetUsername}")`).first();
     await expect(playerLink).toBeVisible();
     await playerLink.hover();
     await playerLink.click();
@@ -499,7 +719,7 @@ export const banUserAsModerator = async (
 
     // Wait for the modal to close as confirmation the suspension was successful
     await expect(modPage.locator(".BanModal")).toBeHidden();
-    console.log("Suspend modal closed - suspension request completed");
+    log("Suspend modal closed - suspension request completed");
 
     // Give the server a moment to process the suspension
     await modPage.waitForTimeout(500);

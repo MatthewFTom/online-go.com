@@ -24,14 +24,16 @@ import { Card } from "@/components/material";
 import { errorAlerter, uuid } from "@/lib/misc";
 import { post } from "@/lib/requests";
 import cached from "@/lib/cached";
-import { Md5 } from "ts-md5/dist/esm/md5";
+import { Md5 } from "ts-md5";
 import { useUser } from "@/lib/hooks";
+import { get_browser_timezone } from "@/lib/browser_timezone";
 
 import { SocialLoginButtons } from "@/components/SocialLoginButtons";
 
 window.Md5 = Md5;
 import { alert } from "@/lib/swal_config";
 import { LoadingButton } from "@/components/LoadingButton";
+import "./SignIn.css";
 
 /***
  * Setup a device UUID so we can logout other *devices* and not all other
@@ -89,10 +91,15 @@ export function SignIn(): React.ReactElement {
     const [submitLoading, setSubmitLoading] = React.useState(false);
     const ref_username = React.useRef<HTMLInputElement>(null);
     const ref_password = React.useRef<HTMLInputElement>(null);
+    const [searchParams] = useSearchParams();
 
     if (!user.anonymous) {
         void navigate("/");
     }
+
+    // Get the next URL from query params (for OAuth flow) or hash (for regular flow)
+    const nextParam = searchParams.get("next");
+    const socialNextUrl = nextParam || "/wait-for-user#" + window.location.hash.substring(1);
 
     const onSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
         event.preventDefault();
@@ -104,6 +111,7 @@ export function SignIn(): React.ReactElement {
                 username: ref_username.current!.value.trim(),
                 password: ref_password.current!.value,
                 ebi: get_ebi(),
+                timezone: get_browser_timezone(),
             })
                 .then((config) => {
                     data.remove("appeals.banned_user_id");
@@ -132,18 +140,27 @@ export function SignIn(): React.ReactElement {
                     data.set(cached.config, config);
 
                     // Note: this causes a page reload, and the new user is set up from scratch in the process
-                    if (window.location.hash && window.location.hash[1] === "/") {
+                    // Check for ?next= query parameter first (used by OAuth authorization flow)
+                    const searchParams = new URLSearchParams(window.location.search);
+                    const nextParam = searchParams.get("next");
+
+                    if (nextParam) {
+                        // Redirect to the ?next= URL (for OAuth authorization flow)
+                        window.location.href = nextParam;
+                    } else if (window.location.hash && window.location.hash[1] === "/") {
+                        // Fallback to hash-based redirect
                         const next_page = window.location.hash.substring(1);
                         window.location.pathname = next_page;
                     } else {
+                        // Default redirect to home
                         window.location.pathname = "/";
                     }
                 })
                 .catch((response) => {
-                    if (response.responseJSON && response.responseJSON.error_code === "banned") {
-                        data.set("appeals.banned_user_id", response.responseJSON.banned_user_id);
-                        data.set("appeals.jwt", response.responseJSON.jwt);
-                        data.set("appeals.ban-reason", response.responseJSON.ban_reason);
+                    if (response && response.error_code === "banned") {
+                        data.set("appeals.banned_user_id", response.banned_user_id);
+                        data.set("appeals.jwt", response.jwt);
+                        data.set("appeals.ban-reason", response.ban_reason);
                         window.location.pathname = "/appeal";
                     } else {
                         errorAlerter(response);
@@ -253,15 +270,20 @@ export function SignIn(): React.ReactElement {
                         ) /* translators: username or password, or sign in with social authentication */
                     }
                 </span>
-                <SocialLoginButtons
-                    next_url={"/wait-for-user#" + window.location.hash.substring(1)}
-                />
+                <SocialLoginButtons next_url={socialNextUrl} />
             </Card>
 
             <div className="registration">
                 <h3>{_("New to Online-Go?")} </h3>
                 <div>
-                    <Link to="/register" className="btn primary">
+                    <Link
+                        to={
+                            nextParam
+                                ? `/register?next=${encodeURIComponent(nextParam)}`
+                                : "/register"
+                        }
+                        className="btn primary"
+                    >
                         <b>{_("Register here!") /* translators: register for an account */}</b>
                     </Link>
                 </div>

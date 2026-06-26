@@ -17,7 +17,9 @@
 
 // (No seeded data in use)
 
-import { Browser } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo } from "@playwright/test";
 
 import { loginAsUser, newTestUsername, prepareNewUser } from "@helpers/user-utils";
 
@@ -27,20 +29,26 @@ import {
     defaultChallengeSettings,
 } from "@helpers/challenge-utils";
 import { clickInTheMiddle } from "@helpers/game-utils";
+import { log } from "@helpers/logger";
 
-import { ogsTest } from "@helpers";
-
-export const modWarnFirstTurnDisconnectorTest = async ({ browser }: { browser: Browser }) => {
-    ogsTest.setTimeout(6 * 60 * 1000); // Set timeout to 6 minutes, to let disconnect happen
+export const modWarnFirstTurnDisconnectorTest = async (
+    {
+        createContext,
+    }: {
+        createContext: (options?: CreateContextOptions) => Promise<BrowserContext>;
+    },
+    testInfo: TestInfo,
+) => {
+    testInfo.setTimeout(10 * 60 * 1000); // Set timeout to 10 minutes, to let disconnect happen (5 min) plus setup/teardown
 
     const { userPage: challengerPage } = await prepareNewUser(
-        browser,
+        createContext,
         newTestUsername("CmFTDChall"), // cspell:disable-line
         "test",
     );
 
     const escaperUsername = newTestUsername("CmFTDis"); // cspell:disable-line
-    const { userPage: escaperPage } = await prepareNewUser(browser, escaperUsername, "test");
+    const { userPage: escaperPage } = await prepareNewUser(createContext, escaperUsername, "test");
 
     // Challenger challenges the escaper
     await createDirectChallenge(challengerPage, escaperUsername, {
@@ -65,10 +73,15 @@ export const modWarnFirstTurnDisconnectorTest = async ({ browser }: { browser: B
 
     await clickInTheMiddle(challengerPage);
 
-    console.log(
+    // Close escaper's context to simulate a disconnect
+    // This triggers the 5-minute auto-resign timer on the server
+    const escaperContext = escaperPage.context();
+    await escaperContext.close();
+    log("Closed escaper context to simulate disconnect");
+
+    log(
         "Note: cmWarnFirstTurnDisconnectorTest waiting for disconnect timer (approximately 5 minutes)...",
     );
-    await escaperPage.close(); // escaper disconnects
 
     // ... eventually challenger gets the ack that we are looking for
     await challengerPage
@@ -79,7 +92,7 @@ export const modWarnFirstTurnDisconnectorTest = async ({ browser }: { browser: B
     await challengerPage.locator(".AccountWarningAck button.primary").click();
 
     // And escaper should have warning when they log in again
-    const newEscaperContext = await browser.newContext();
+    const newEscaperContext = await createContext();
     const newEscaperPage = await newEscaperContext.newPage();
 
     await loginAsUser(newEscaperPage, escaperUsername, "test");

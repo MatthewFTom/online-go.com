@@ -16,12 +16,18 @@
  */
 
 import * as React from "react";
+import moment from "moment";
 import { _, interpolate, pgettext } from "@/lib/translate";
 import { get, post, put } from "@/lib/requests";
 
-import ReactTable from "react-table";
-
-import selectTableHOC from "react-table/lib/hoc/selectTable";
+import {
+    useReactTable,
+    getCoreRowModel,
+    ColumnDef,
+    flexRender,
+    CellContext,
+    HeaderContext,
+} from "@tanstack/react-table";
 
 import { openModal } from "@/components/Modal";
 import { Player } from "@/components/Player";
@@ -29,6 +35,7 @@ import { Player } from "@/components/Player";
 import { JosekiPermissionsPanel } from "@/components/JosekiPermissionsPanel";
 import { JosekiPageVisits, JosekiStatsModal } from "@/components/JosekiStatsModal";
 import { JosekiTagEditor } from "@/components/JosekiTagEditor/JosekiTagEditor";
+import "./JosekiAdmin.css";
 
 interface JosekiAdminProps {
     server_url: string;
@@ -39,40 +46,157 @@ interface JosekiAdminProps {
     updateDBLockStatus: (value: boolean) => void;
 }
 
+interface AuditRow {
+    _id: string;
+    node_id: number;
+    placement: string;
+    user_id: number;
+    date: string;
+    comment: string;
+    new_value: string;
+}
+
+type AdminSubTab = "audit" | "tags" | "perms" | "misc";
+
 interface JosekiAdminState {
-    data: any[];
+    data: AuditRow[];
     pages: number;
     current_page: number;
     current_pageSize: number;
     loading: boolean;
-    all_selected: boolean;
-    any_selected: boolean;
     server_status: string;
-    selections: Map<string, boolean>;
     reversions: Map<string, string>;
     schema_version: string;
     filter_user_id: string;
     filter_position_id: string;
-    filter_tag: string;
-    filter_audit_type: string;
     page_visits?: string;
     daily_visits: JosekiPageVisits[];
+    rowSelection: Record<string, boolean>;
+    sub_tab: AdminSubTab;
 }
 
-const AuditTypes = [
-    "CREATED",
-    "CATEGORY_CHANGE",
-    "DESCRIPTION_CHANGE",
-    "SOURCE_CHANGE",
-    "ADD_CHILD",
-    "REMOVE_CHILD",
-    "ADD_COMMENT",
-    "REMOVE_COMMENT",
-    "DEACTIVATE",
-    "REACTIVATE",
-];
+interface AuditTableProps {
+    data: AuditRow[];
+    pageCount: number;
+    loading: boolean;
+    rowSelection: Record<string, boolean>;
+    onRowSelectionChange: (rowSelection: Record<string, boolean>) => void;
+    currentPage: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (pageSize: number) => void;
+    columns: ColumnDef<AuditRow>[];
+    userCanAdminister: boolean;
+    onInitialLoad: () => void;
+}
 
-const SelectTable = selectTableHOC(ReactTable);
+function AuditTable(props: AuditTableProps) {
+    const [hasLoadedInitially, setHasLoadedInitially] = React.useState(false);
+
+    React.useEffect(() => {
+        if (!hasLoadedInitially) {
+            props.onInitialLoad();
+            setHasLoadedInitially(true);
+        }
+    }, [hasLoadedInitially, props.onInitialLoad]);
+
+    const table = useReactTable({
+        data: props.data,
+        columns: props.columns,
+        pageCount: props.pageCount,
+        state: {
+            pagination: {
+                pageIndex: props.currentPage,
+                pageSize: props.pageSize,
+            },
+            rowSelection: props.rowSelection,
+        },
+        enableRowSelection: props.userCanAdminister,
+        onRowSelectionChange: (updater) => {
+            const newSelection =
+                typeof updater === "function" ? updater(props.rowSelection) : updater;
+            props.onRowSelectionChange(newSelection);
+        },
+        onPaginationChange: (updater) => {
+            const newPagination =
+                typeof updater === "function"
+                    ? updater({ pageIndex: props.currentPage, pageSize: props.pageSize })
+                    : updater;
+            props.onPageChange(newPagination.pageIndex);
+            props.onPageSizeChange(newPagination.pageSize);
+        },
+        getCoreRowModel: getCoreRowModel(),
+        manualPagination: true,
+        getRowId: (row) => row._id,
+    });
+
+    const rows = table.getRowModel().rows;
+
+    const renderCell = (row: (typeof rows)[number], id: string): React.ReactNode | null => {
+        const cell = row.getVisibleCells().find((c) => c.column.id === id);
+        if (!cell) {
+            return null;
+        }
+        return flexRender(cell.column.columnDef.cell, cell.getContext());
+    };
+
+    return (
+        <div className="audit-list">
+            {props.loading ? (
+                <div className="audit-empty">{_("Loading…")}</div>
+            ) : rows.length === 0 ? (
+                <div className="audit-empty">{_("No results")}</div>
+            ) : (
+                rows.map((row) => (
+                    <div className="audit-row" key={row.id}>
+                        <div className="audit-row-line1">
+                            {props.userCanAdminister && (
+                                <span className="audit-row-select">
+                                    {renderCell(row, "select")}
+                                </span>
+                            )}
+                            <span className="audit-row-pos">{renderCell(row, "placement")}</span>
+                            <span className="audit-row-date">{renderCell(row, "date")}</span>
+                        </div>
+                        <div className="audit-row-line2">
+                            <span className="audit-row-user">{renderCell(row, "user_id")}</span>
+                            <span className="audit-row-action">{renderCell(row, "comment")}</span>
+                            <span className="audit-row-result">{renderCell(row, "new_value")}</span>
+                        </div>
+                    </div>
+                ))
+            )}
+
+            <div className="audit-pagination">
+                <button
+                    className="audit-pagination-btn"
+                    onClick={() => table.previousPage()}
+                    disabled={!table.getCanPreviousPage()}
+                    title={_("Previous page")}
+                >
+                    <i className="fa fa-chevron-left" />
+                </button>
+                <span className="audit-pagination-info">
+                    {interpolate(
+                        pgettext("Pagination: page X of Y", "Page {{page}} of {{total}}"),
+                        {
+                            page: table.getState().pagination.pageIndex + 1,
+                            total: table.getPageCount() || 1,
+                        },
+                    )}
+                </span>
+                <button
+                    className="audit-pagination-btn"
+                    onClick={() => table.nextPage()}
+                    disabled={!table.getCanNextPage()}
+                    title={_("Next page")}
+                >
+                    <i className="fa fa-chevron-right" />
+                </button>
+            </div>
+        </div>
+    );
+}
 
 export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdminState> {
     constructor(props: JosekiAdminProps) {
@@ -83,18 +207,15 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
             current_page: 0,
             current_pageSize: 15,
             loading: false,
-            all_selected: false,
-            any_selected: false,
             server_status: "",
-            selections: new Map(),
             reversions: new Map(),
             schema_version: "",
             filter_user_id: "",
             filter_position_id: "",
-            filter_tag: "",
-            filter_audit_type: "",
             page_visits: undefined,
             daily_visits: [],
+            rowSelection: {},
+            sub_tab: "audit",
         };
     }
 
@@ -116,56 +237,47 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
     revertAllSelectedChanges = () => {
         // set up to revert each selected change one at a time...
         const reversions = new Map();
-        this.state.selections.forEach((selected, selection) => {
-            if (selected) {
-                const target_id = selection.substring(7);
-                reversions.set(selection, `Reversion of audit ${target_id} pending`);
+        Object.keys(this.state.rowSelection).forEach((id) => {
+            if (this.state.rowSelection[id]) {
+                reversions.set(id, `Reversion of audit ${id} pending`);
             }
         });
-        this.setState({ reversions: reversions });
-        this.revertSelectedChanges(this.state.selections);
+        this.setState({ reversions });
+
+        const selectedIds = Object.keys(this.state.rowSelection).filter(
+            (id) => this.state.rowSelection[id],
+        );
+        this.revertSelectedChangesById(selectedIds);
     };
 
     //  Call the server to revert each selected item in turn (one at a time, for ease of understanding what happened)
-    revertSelectedChanges = (current_selections: Map<string, boolean>) => {
-        const selections = current_selections.keys();
-        let { value: next_selection, done: done } = selections.next();
-
-        // Find next actually selected item.
-        while (!current_selections.get(next_selection) && !done) {
-            ({ value: next_selection, done: done } = selections.next());
-        }
-        // And if there was one, revert it then move on to the next after the previous is done.
-        if (current_selections.get(next_selection)) {
-            const target_id = next_selection.substring(7); //  get rid of the weird "select-" from SelectTable
-
-            post(this.props.server_url + "revert", { audit_id: target_id })
-                .then((body) => {
-                    // Display the result of what happened
-                    const next_selections = new Map(current_selections);
-                    next_selections.set(next_selection, false);
-                    const next_reversions = new Map(this.state.reversions);
-                    next_reversions.set(
-                        next_selection,
-                        `Reversion of audit ${target_id} status: ${body.result}`,
-                    );
-                    this.setState({
-                        selections: next_selections,
-                        reversions: next_reversions,
-                    });
-
-                    // get on with the next one, if there are more
-                    this.revertSelectedChanges(next_selections);
-                })
-                .catch((r) => {
-                    console.log("Revert POST failed:", r);
-                });
-        } else {
+    revertSelectedChangesById = (selectedIds: string[]) => {
+        if (selectedIds.length === 0) {
             // There are no more reversions to be done, so reload the audit log to show the ones that were done
-            //console.log("...reversions done.")
             this.reloadData();
-            this.props.loadPositionToBoard("root"); // and reset the board, incase the status of what is displayed changed
+            this.props.loadPositionToBoard("root"); // and reset the board, in case the status of what is displayed changed
+            return;
         }
+
+        const [currentId, ...remainingIds] = selectedIds;
+
+        post(this.props.server_url + "revert", { audit_id: currentId })
+            .then((body) => {
+                // Display the result of what happened
+                const nextReversions = new Map(this.state.reversions);
+                nextReversions.set(
+                    currentId,
+                    `Reversion of audit ${currentId} status: ${body.result}`,
+                );
+                this.setState({ reversions: nextReversions });
+
+                // get on with the next one, if there are more
+                this.revertSelectedChangesById(remainingIds);
+            })
+            .catch((r) => {
+                console.log("Revert POST failed:", r);
+                this.revertSelectedChangesById(remainingIds);
+            });
     };
 
     // note: django back-end pager starts at page 1, our paged display component starts at page zero
@@ -182,25 +294,13 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
             audits_url += `&user=${this.state.filter_user_id}`;
         }
 
-        // Not supported in new backend yet
-        //if (this.state.filter_audit_type !== "") {
-        //    audits_url += `&type=${this.state.filter_audit_type}`;
-        //}
-
         get(audits_url)
             .then((body) => {
-                // initialise selections, so we have the full list of them for select-all operations
-                const selections = new Map();
-                for (const a of body.results) {
-                    const key = `select-${a._id}`;
-                    selections.set(key, false);
-                }
                 this.setState({
-                    selections,
                     data: body.results,
                     pages: body.num_pages,
-                    all_selected: false,
                     loading: false,
+                    rowSelection: {},
                 });
             })
             .catch((r) => {
@@ -208,7 +308,7 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
             });
     };
 
-    fetchDataForTable = (table_state: any) => {
+    fetchDataForTable = (table_state: { page: number; pageSize: number }) => {
         // this shenanigans is so that we save the table state passed in the argument to this callback
         // into our component state, enabling us to reload the data again when we need to (after reverting an audit)
         this.setState(
@@ -221,36 +321,34 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
         );
     };
 
+    handleInitialLoad = () => {
+        this.setState({ loading: true }, this.reloadData);
+    };
+
     onUserIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const new_id = e.target.value;
         if (!/^\d*$/.test(new_id)) {
             return;
-        } else {
-            this.setState({ filter_user_id: new_id }, this.reloadData);
         }
+        // Reset to page 0 on filter change so a stale page index doesn't
+        // land outside the filtered result's page count.
+        this.setState({ filter_user_id: new_id, current_page: 0, loading: true }, this.reloadData);
     };
 
     onFilterPositionChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const new_id = e.target.value;
         if (!/^\d*$/.test(new_id)) {
             return;
-        } else {
-            this.setState({ filter_position_id: new_id }, this.renderFilteredPosition);
         }
-    };
-
-    onFilterTagChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const new_tag = e.target.value;
-        this.setState({ filter_tag: new_tag }, this.reloadData);
+        this.setState(
+            { filter_position_id: new_id, current_page: 0, loading: true },
+            this.renderFilteredPosition,
+        );
     };
 
     renderFilteredPosition = () => {
         this.reloadData();
         this.props.loadPositionToBoard(this.state.filter_position_id);
-    };
-
-    onFilterAuditTypeChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        this.setState({ filter_audit_type: e.target.value }, this.reloadData);
     };
 
     showVisitStats = () => {
@@ -269,182 +367,213 @@ export class JosekiAdmin extends React.PureComponent<JosekiAdminProps, JosekiAdm
             });
     };
 
+    getColumns = (): ColumnDef<AuditRow>[] => [
+        ...(this.props.user_can_administer
+            ? [
+                  {
+                      id: "select",
+                      header: ({ table }: HeaderContext<AuditRow, unknown>) => (
+                          <input
+                              type="checkbox"
+                              checked={table.getIsAllRowsSelected()}
+                              ref={(el: HTMLInputElement | null) => {
+                                  if (el) {
+                                      el.indeterminate = table.getIsSomeRowsSelected();
+                                  }
+                              }}
+                              onChange={table.getToggleAllRowsSelectedHandler()}
+                          />
+                      ),
+                      cell: ({ row }: CellContext<AuditRow, unknown>) => (
+                          <input
+                              type="checkbox"
+                              checked={row.getIsSelected()}
+                              disabled={!row.getCanSelect()}
+                              onChange={row.getToggleSelectedHandler()}
+                          />
+                      ),
+                  } as ColumnDef<AuditRow>,
+              ]
+            : []),
+        {
+            header: _("At"), // translators: This is the header field for move coordinates on the joseki admin audit table
+            accessorKey: "placement",
+            // Click the placement to see the position on the board
+            cell: ({ row }: CellContext<AuditRow, string>) => (
+                <div
+                    className="position-link"
+                    onClick={() => {
+                        this.props.loadPositionToBoard(row.original.node_id.toString());
+                    }}
+                    style={{ cursor: "pointer" }}
+                >
+                    {row.original.placement}
+                </div>
+            ),
+        },
+        {
+            header: _("User"),
+            accessorKey: "user_id",
+            cell: ({ row }: CellContext<AuditRow, number>) => (
+                <Player user={row.original.user_id} />
+            ),
+        },
+        {
+            header: _("Date"),
+            accessorKey: "date",
+            cell: ({ row }: CellContext<AuditRow, string>) => {
+                const m = moment(row.original.date);
+                return m.isValid() ? m.format("YYYY-MM-DD HH:mm") : row.original.date;
+            },
+        },
+        {
+            header: _("Action"),
+            accessorKey: "comment",
+        },
+        {
+            header: _("Result"),
+            accessorKey: "new_value",
+        },
+    ];
+
     render = () => {
-        // Don't let the user select rows if they can't actually do anything with them.
-        const AuditTable = this.props.user_can_administer ? SelectTable : ReactTable;
-
-        const audit_type_selections = Object.keys(AuditTypes).map((selection, i) => (
-            <option key={i} value={AuditTypes[selection as keyof typeof AuditTypes] as any}>
-                {(AuditTypes[selection as keyof typeof AuditTypes] as string).toLowerCase()}
-            </option>
-        ));
-
-        audit_type_selections.unshift(<option key={-1} value=""></option>);
-
         const reversions = Array.from(this.state.reversions.values());
+        const has_selection = Object.values(this.state.rowSelection).some((v) => v);
+        const sub_tab = this.state.sub_tab;
+
+        const tabs: { id: AdminSubTab; label: string }[] = [
+            { id: "audit", label: pgettext("Joseki admin sub-tab", "Audit") },
+        ];
+        if (this.props.user_can_edit) {
+            tabs.push({ id: "tags", label: pgettext("Joseki admin sub-tab", "Tags") });
+        }
+        if (this.props.user_can_administer) {
+            tabs.push({ id: "perms", label: pgettext("Joseki admin sub-tab", "Perms") });
+            tabs.push({ id: "misc", label: pgettext("Joseki admin sub-tab", "Misc") });
+        }
+        const active_tab = tabs.some((t) => t.id === sub_tab) ? sub_tab : "audit";
 
         return (
             <div className="admin-container">
-                {this.props.user_can_edit && (
-                    <>
-                        <h3>Audit Admin</h3>
-                        <div className="audit-actions">
+                <div className="joseki-admin-tabs">
+                    {tabs.map((t) => (
+                        <button
+                            key={t.id}
+                            className={"joseki-admin-tab" + (active_tab === t.id ? " active" : "")}
+                            onClick={() => this.setState({ sub_tab: t.id })}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
+
+                <div className="joseki-admin-meta">
+                    <span>
+                        {interpolate(_("Page visits: {{count}}"), {
+                            count: this.state.page_visits || "…",
+                        })}
+                    </span>
+                    <button className="joseki-admin-meta-link" onClick={this.showVisitStats}>
+                        {pgettext("Joseki admin: open visit-stats modal", "details")}
+                    </button>
+                </div>
+
+                {active_tab === "audit" && (
+                    <div className="admin-pane admin-pane-audit">
+                        {this.props.user_can_edit && (
                             <div className="audit-filters">
-                                <div className="audit-filter">
-                                    <div>Filter by position:</div>
+                                <label className="audit-filter">
+                                    <span>
+                                        {pgettext("Joseki admin filter label", "Position id")}
+                                    </span>
                                     <input
                                         value={this.state.filter_position_id}
                                         onChange={this.onFilterPositionChange}
                                     />
-                                </div>
-                                <div className="audit-filter">
-                                    <div>Filter by user (id):</div>
+                                </label>
+                                <label className="audit-filter">
+                                    <span>{pgettext("Joseki admin filter label", "User id")}</span>
                                     <input
                                         value={this.state.filter_user_id}
                                         onChange={this.onUserIdChange}
                                     />
-                                    <span>
-                                        (<Player user={parseInt(this.state.filter_user_id)} />)
-                                    </span>
-                                </div>
-                                <div
-                                    className={
-                                        "hide audit-filter" +
-                                        (this.state.filter_position_id === "" &&
-                                        this.state.filter_user_id === ""
-                                            ? ""
-                                            : " audit-filter-overridden")
-                                    }
-                                >
-                                    <div>Filter by type:</div>
-                                    <select
-                                        value={this.state.filter_audit_type}
-                                        onChange={this.onFilterAuditTypeChange}
-                                    >
-                                        {audit_type_selections}
-                                    </select>
-                                </div>
+                                </label>
+                                {this.state.filter_user_id !== "" && (
+                                    <div className="audit-filter-resolved">
+                                        <Player user={parseInt(this.state.filter_user_id)} />
+                                    </div>
+                                )}
                             </div>
-                            {this.props.user_can_administer && (
-                                <button
-                                    className={
-                                        "btn" + (this.state.any_selected ? " danger" : "disabled")
-                                    }
-                                    onClick={this.revertAllSelectedChanges}
-                                >
-                                    {_("Revert")}
-                                </button>
-                            )}
-                        </div>
-                    </>
-                )}
-                {reversions.length > 0 &&
-                    reversions.map((reversion, idx) => <div key={idx}>{reversion}</div>)}
-                <AuditTable
-                    showPaginationBottom
-                    pageSizeOptions={[5, 10, 15, 30, 50, 100]}
-                    data={this.state.data}
-                    pages={this.state.pages}
-                    loading={this.state.loading}
-                    defaultPageSize={15}
-                    minRows={10}
-                    manual
-                    selectType={"checkbox"}
-                    isSelected={(key) => {
-                        const key_string = `select-${key}`;
-                        const result =
-                            (this.state.selections.has(key_string) &&
-                                this.state.selections.get(key_string)) ||
-                            false;
-                        //console.log(`check for ${key_string}:`, result);
-                        return result;
-                    }}
-                    toggleSelection={(key) => {
-                        const selections = new Map(this.state.selections);
-                        selections.set(key, selections.has(key) ? !selections.get(key) : true);
-                        this.setState({
-                            any_selected: Array.from(selections.values()).includes(true),
-                            selections,
-                        });
-                    }}
-                    selectAll={this.state.all_selected}
-                    toggleAll={() => {
-                        const all_selected = !this.state.all_selected;
-                        const selections = new Map(this.state.selections);
-                        selections.forEach((value, key) => {
-                            selections.set(key, all_selected);
-                        });
-                        this.setState({
-                            any_selected: Array.from(selections.values()).includes(true),
-                            selections,
-                            all_selected,
-                        });
-                    }}
-                    onFetchData={this.fetchDataForTable}
-                    columns={[
-                        {
-                            Header: _("At"), // translators: This is the header field for move coordinates on the joseki admin audit table
-                            accessor: "placement",
-                            maxWidth: 60,
-                            // Click the placement to see the position on the board
-                            getProps: ((_state: any, rowInfo: any, _column: any) => ({
-                                onClick: () => {
-                                    this.props.loadPositionToBoard(
-                                        rowInfo.original.node_id.toString(),
-                                    );
-                                },
-                                className: "position-link",
-                            })) as any,
-                        },
-                        {
-                            Header: _("User"),
-                            accessor: "user_id",
-                            Cell: (props) => <Player user={props.value}></Player>,
-                        },
-                        {
-                            Header: _("Date"),
-                            accessor: "date",
-                        },
-                        {
-                            Header: _("Action"),
-                            accessor: "comment",
-                            minWidth: 200,
-                        },
-                        {
-                            Header: _("Result"),
-                            accessor: "new_value",
-                            minWidth: 250,
-                        },
-                    ]}
-                />
-                <div className="explorer-stats">
-                    <span>
-                        {interpolate(_("Page visits: {{count}}"), {
-                            count: this.state.page_visits || "...",
-                        })}
-                    </span>
-                    <button className="s" onClick={this.showVisitStats}>
-                        {pgettext(
-                            "A button that shows details of joseki visit statistics",
-                            "details",
                         )}
-                    </button>
-                </div>
-                <h3>Tag Editor</h3>
-                <JosekiTagEditor />
-                {this.props.user_can_administer && (
-                    <div className="bottom-admin-stuff">
-                        <h3>{_("Permissions Admin")}</h3>
-                        <div className="user-admin">
-                            <JosekiPermissionsPanel server_url={this.props.server_url} />
+
+                        {reversions.length > 0 && (
+                            <div className="audit-reversions">
+                                {reversions.map((reversion, idx) => (
+                                    <div key={idx}>{reversion}</div>
+                                ))}
+                            </div>
+                        )}
+
+                        <AuditTable
+                            data={this.state.data}
+                            pageCount={this.state.pages}
+                            loading={this.state.loading}
+                            rowSelection={this.state.rowSelection}
+                            onRowSelectionChange={(rowSelection) => {
+                                this.setState({ rowSelection });
+                            }}
+                            currentPage={this.state.current_page}
+                            pageSize={this.state.current_pageSize}
+                            onPageChange={(page) => {
+                                this.setState(
+                                    { current_page: page, loading: true },
+                                    this.reloadData,
+                                );
+                            }}
+                            onPageSizeChange={(pageSize) => {
+                                this.setState(
+                                    { current_pageSize: pageSize, loading: true },
+                                    this.reloadData,
+                                );
+                            }}
+                            columns={this.getColumns()}
+                            userCanAdminister={this.props.user_can_administer}
+                            onInitialLoad={this.handleInitialLoad}
+                        />
+
+                        {this.props.user_can_administer && has_selection && (
+                            <div className="audit-revert-bar">
+                                <button className="reject" onClick={this.revertAllSelectedChanges}>
+                                    {_("Revert selected")}
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {active_tab === "tags" && this.props.user_can_edit && (
+                    <div className="admin-pane">
+                        <JosekiTagEditor />
+                    </div>
+                )}
+
+                {active_tab === "perms" && this.props.user_can_administer && (
+                    <div className="admin-pane">
+                        <JosekiPermissionsPanel server_url={this.props.server_url} />
+                    </div>
+                )}
+
+                {active_tab === "misc" && this.props.user_can_administer && (
+                    <div className="admin-pane admin-pane-misc">
+                        <div className="joseki-admin-subhead">
+                            {pgettext("Joseki admin subsection heading", "Database")}
                         </div>
-                        <h3>{_("Misc Admin")}</h3>
-                        <div className="misc-admin">
-                            <button className="" onClick={this.toggleLockdown}>
-                                {this.props.db_locked_down ? _("Unlock") : _("Lockdown")}
-                            </button>
+                        <button onClick={this.toggleLockdown}>
+                            {this.props.db_locked_down ? _("Unlock") : _("Lockdown")}
+                        </button>
+                        <div className="joseki-admin-meta">
                             <span>
-                                {_("Schema version")}: {this.state.schema_version}
+                                {_("Schema version")}: {this.state.schema_version || "…"}
                             </span>
                         </div>
                     </div>

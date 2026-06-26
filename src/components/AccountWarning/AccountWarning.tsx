@@ -26,6 +26,7 @@ import { useMainGoban, useUser } from "@/lib/hooks";
 import { AutoTranslate } from "@/components/AutoTranslate";
 import { useLocation } from "react-router-dom";
 import { CANNED_MESSAGES } from "./CannedMessages";
+import "./AccountWarning.css";
 
 const BUTTON_COUNTDOWN_TIME = 10000; // ms;
 
@@ -135,7 +136,7 @@ function MessageTextRender(props: MessageTextRenderProps): React.ReactElement {
     if (props.warning.message_id) {
         return (
             <div className={`canned-message ${props.warning.message_id}`}>
-                {CANNED_MESSAGES[props.warning.message_id](props.warning.interpolation_data)}
+                {CANNED_MESSAGES?.[props.warning.message_id]?.(props.warning.interpolation_data)}
             </div>
         );
     } else {

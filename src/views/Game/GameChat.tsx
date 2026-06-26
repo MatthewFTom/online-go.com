@@ -19,6 +19,7 @@ import * as data from "@/lib/data";
 import * as preferences from "@/lib/preferences";
 import * as React from "react";
 import { LineText } from "@/components/misc-ui";
+import { sanitizeMessage } from "@/lib/misc";
 import { Link } from "react-router-dom";
 import { _, pgettext, interpolate, current_language, moment } from "@/lib/translate";
 import { Player } from "@/components/Player";
@@ -31,6 +32,7 @@ import { inGameModChannel } from "@/lib/chat_manager";
 import { MoveTree } from "goban";
 import { useUserIsParticipant } from "./GameHooks";
 import { useGobanController } from "./goban_context";
+import "./GameChat.css";
 
 export type ChatMode = "main" | "malkovich" | "moderator" | "hidden" | "personal";
 interface GameChatProperties {
@@ -185,15 +187,16 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
     }, []);
 
     const onKeyPress = (event: React.KeyboardEvent<HTMLElement>): boolean | void => {
-        if (event.key === "Enter") {
-            const input = event.target as HTMLInputElement;
+        if (!event.shiftKey && event.key === "Enter") {
+            const input = event.target as HTMLTextAreaElement;
             if (input.className === "qc-option") {
                 //saveEdit();
                 console.warn("Quick chat editing not implemented");
                 event.preventDefault();
             } else {
-                goban.sendChat(input.value, selected_chat_log);
+                goban.sendChat(sanitizeMessage(input.value), selected_chat_log);
                 input.value = "";
+                input.style.height = "auto";
                 return false;
             }
         }
@@ -205,23 +208,29 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
             return;
         }
 
-        const tf = chat_log.scrollHeight - chat_log.scrollTop - 10 < chat_log.offsetHeight;
+        // Because chat-log uses flex-direction: column-reverse to achieve
+        // bottom-anchoring, the scroll direction is inverted: scrollTop is 0
+        // when at the bottom, and becomes negative as the user scrolls up.
+        // Therefore the "is at bottom" check changes from the normal
+        //   scrollHeight - scrollTop - 10 < offsetHeight
+        // to simply checking whether scrollTop is close to 0.
+        const tf = chat_log.scrollTop > -10;
+
         if (tf !== scrolled_to_bottom.current) {
             scrolled_to_bottom.current = tf;
             chat_log.className = "chat-log " + (tf ? "autoscrolling" : "");
         }
-        scrolled_to_bottom.current =
-            chat_log.scrollHeight - chat_log.scrollTop - 10 < chat_log.offsetHeight;
+        scrolled_to_bottom.current = chat_log.scrollTop > -10;
     };
 
     const autoscroll = () => {
         const chat_log = ref_chat_log.current;
 
         if (chat_log && scrolled_to_bottom.current) {
-            chat_log.scrollTop = chat_log.scrollHeight;
+            chat_log.scrollTop = 0;
             setTimeout(() => {
                 if (chat_log) {
-                    chat_log.scrollTop = chat_log.scrollHeight;
+                    chat_log.scrollTop = 0;
                 }
             }, 100);
         }
@@ -249,19 +258,22 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
                         className="chat-log autoscrolling"
                         onScroll={updateScrollPosition}
                     >
-                        {chat_lines.current.map((line: ChatLine) => {
-                            const ll = last_line;
-                            last_line = line;
-                            return (
-                                <GameChatLine
-                                    key={line.chat_id}
-                                    line={line}
-                                    last_line={ll}
-                                    game_id={props.game_id}
-                                    review_id={props.review_id}
-                                />
-                            );
-                        })}
+                        <div className="chat-log-spacer" />
+                        <div className="chat-log-inner">
+                            {chat_lines.current.map((line: ChatLine) => {
+                                const ll = last_line;
+                                last_line = line;
+                                return (
+                                    <GameChatLine
+                                        key={line.chat_id}
+                                        line={line}
+                                        last_line={ll}
+                                        game_id={props.game_id}
+                                        review_id={props.review_id}
+                                    />
+                                );
+                            })}
+                        </div>
                     </div>
                 </div>
                 {(show_player_list || null) && <ChatUserList channel={channel} />}
@@ -318,6 +330,7 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
                     onKeyPress={onKeyPress}
                     onFocus={() => setShowQuickChat(false)}
                 />
+                {/* quick chat toggle */}
                 {userIsPlayer &&
                 user.email_validated &&
                 props.game_id &&
@@ -329,6 +342,7 @@ export function GameChat(props: GameChatProperties): React.ReactElement {
                         onClick={() => setShowQuickChat(!show_quick_chat)}
                     />
                 ) : null}
+                {/* ChatUserCount */}
                 <ChatUserCount
                     onClick={togglePlayerList}
                     active={show_player_list}
@@ -383,7 +397,7 @@ export function QuickChat(props: QuickChatProperties): React.ReactElement {
 
     const onKeyPress = (event: React.KeyboardEvent<HTMLElement>) => {
         if (event.key === "Enter") {
-            const input = event.target as HTMLInputElement;
+            const input = event.target as HTMLTextAreaElement;
             if (input.className === "qc-option") {
                 saveEdit();
                 event.preventDefault();
@@ -545,7 +559,9 @@ export function GameChatLine(props: GameChatLineProperties): React.ReactElement 
                         ]{" "}
                     </span>
                 )}
-                {(line.player_id || null) && <Player user={line} flare disableCacheUpdate />}
+                {(line.player_id || null) && (
+                    <Player user={line} flare disableCacheUpdate tabIndex={-1} />
+                )}
                 <span className="body">
                     {third_person ? " " : ": "}
                     <MarkupChatLine line={line} />
@@ -580,20 +596,25 @@ let orig_move: MoveTree | null = null;
 let stashed_pen_marks: any = null; //goban.pen_marks;
 //let orig_marks: unknown[] | null = null;
 
+const position_split_regex = /((?<=^|\s)\b[a-zA-Z][0-9]{1,2}\b[,.!?]*(?=\s|$))/m;
+const position_pattern_regex = /(?<=^|\s)\b([a-zA-Z][0-9]{1,2})\b([,.!?]*)(?=\s|$)/m;
+
 function MarkupChatLine({ line }: { line: ChatLine }): React.ReactElement {
     const body = line.body;
     const goban_controller = useGobanController();
     const goban = goban_controller.goban;
 
     const highlight_position = (event: React.MouseEvent<HTMLSpanElement>) => {
-        const pos = parsePosition((event.target as HTMLSpanElement).innerText, goban);
+        const position = event.currentTarget.dataset.position || "";
+        const pos = parsePosition(position, goban);
         if (pos.i >= 0) {
             goban.getMarks(pos.i, pos.j).chat_triangle = true;
             goban.drawSquare(pos.i, pos.j);
         }
     };
     function unhighlight_position(event: React.MouseEvent<HTMLSpanElement>) {
-        const pos = parsePosition((event.target as HTMLSpanElement).innerText, goban);
+        const position = event.currentTarget.dataset.position || "";
+        const pos = parsePosition(position, goban);
         if (pos.i >= 0) {
             goban.getMarks(pos.i, pos.j).chat_triangle = false;
             goban.drawSquare(pos.i, pos.j);
@@ -605,22 +626,27 @@ function MarkupChatLine({ line }: { line: ChatLine }): React.ReactElement {
             <React.Fragment>
                 {chat_markup(body, [
                     {
-                        split: /((?<=^|\s)\b[a-zA-Z][0-9]{1,2}\b(?=\s|$))/gm,
-                        pattern: /(?<=^|\s)\b([a-zA-Z][0-9]{1,2})\b(?=\s|$)/gm,
+                        split: position_split_regex,
+                        pattern: position_pattern_regex,
                         replacement: (m, idx) => {
                             const pos = m[1];
                             if (parsePosition(pos, goban).i < 0) {
                                 return <span key={idx}>{m[1]}</span>;
                             }
                             return (
-                                <span
-                                    key={idx}
-                                    className="position"
-                                    onMouseEnter={highlight_position}
-                                    onMouseLeave={unhighlight_position}
-                                >
-                                    {m[1]}
-                                </span>
+                                <React.Fragment key={idx}>
+                                    <span
+                                        className={m[2] ? "position tight-right" : "position"}
+                                        data-position={m[1]}
+                                        onMouseEnter={highlight_position}
+                                        onMouseLeave={unhighlight_position}
+                                    >
+                                        {m[1]}
+                                    </span>
+                                    {(m[2] || null) && (
+                                        <span className="position-trailing">{m[2]}</span>
+                                    )}
+                                </React.Fragment>
                             );
                         },
                     },

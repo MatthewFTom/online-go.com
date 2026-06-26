@@ -29,6 +29,11 @@ import { UndoRequestReceivedIntro } from "./UndoIntro";
 import { CommunityModeratorIntro } from "./CommunityModeratorIntro";
 import { OJEIntro } from "./OJEIntro";
 import { GameLogHelp } from "./GameLogHelp";
+import { AIDetectionAppealHelp } from "./AIDetectionAppealHelp";
+import { EscapingAppealHelp } from "./EscapingAppealHelp";
+import { EscapingJudgementToolIntro } from "./EscapingJudgementToolIntro";
+import { KibitzHelpFlows } from "@/views/Kibitz/HelpFlows/KibitzHelpFlows";
+import "./HelpFlows.css";
 
 /**
  * This component is a handy wrapper for all the Help Flows, and reset on login/logout
@@ -89,8 +94,12 @@ export function HelpFlows(): React.ReactElement {
 
             <CommunityModeratorIntro />
             <GameLogHelp />
+            <AIDetectionAppealHelp />
+            <EscapingAppealHelp />
+            <EscapingJudgementToolIntro />
 
             <OJEIntro />
+            <KibitzHelpFlows />
         </>
     );
 }

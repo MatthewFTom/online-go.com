@@ -68,6 +68,7 @@ interface DockProps {
     historical_black: rest_api.games.Player | null;
     historical_white: rest_api.games.Player | null;
     ai_suspected: boolean;
+    className?: string;
 }
 
 export function GameDock({
@@ -77,6 +78,7 @@ export function GameDock({
     historical_black,
     historical_white,
     ai_suspected,
+    className,
 }: DockProps): React.ReactElement {
     const goban_controller = useGobanController();
     const goban = goban_controller.goban;
@@ -167,16 +169,16 @@ export function GameDock({
     };
 
     const showGameInfo = () => {
-        for (const k of [
-            "komi",
-            "rules",
-            "handicap",
-            "handicap_rank_difference",
-            "rengo",
-            "rengo_teams",
-        ] as const) {
-            (goban.config as any)[k] = goban.engine.config[k];
-        }
+        const ec = goban.engine.config;
+        Object.assign(goban.config, {
+            komi: ec.komi,
+            rules: ec.rules,
+            handicap: ec.handicap,
+            handicap_rank_difference: ec.handicap_rank_difference,
+            rengo: ec.rengo,
+            rengo_teams: ec.rengo_teams,
+            disable_vacation: ec.disable_vacation,
+        });
         openGameInfoModal(
             goban.config,
             historical_black || goban.engine.players.black,
@@ -298,6 +300,18 @@ export function GameDock({
         });
     };
 
+    const showMoveMetadataModal = () => {
+        if (!goban || !goban.config) {
+            console.error("Goban or goban.config is not available");
+            return;
+        }
+        showModal(ModalTypes.GameMoveMetadata, {
+            config: goban.config,
+            black: historical_black || engine.players.black,
+            white: historical_white || engine.players.white,
+        });
+    };
+
     const toggleAnonymousModerator = () => {
         const channel = `game-${game_id}`;
         data.set(
@@ -357,7 +371,7 @@ export function GameDock({
         engine.getMoveNumber() === current_move_number ? player_to_move : engine.playerNotToMove();
 
     return (
-        <Dock>
+        <Dock className={className}>
             {(tournament_id || null) && (
                 <Link className="plain" to={`/tournament/${tournament_id}`}>
                     <i className="fa fa-trophy" title={tournament_name ?? _("Tournament")} />{" "}
@@ -451,7 +465,10 @@ export function GameDock({
                     </a>
                 </Tooltip>
             )}
-            {((!review_id && (user_is_player || user_can_intervene) && phase !== "finished") ||
+            {((!review_id &&
+                (user_is_player || user_can_intervene) &&
+                phase !== "finished" &&
+                !(user_is_player && !user_can_intervene && engine.config.disable_vacation)) ||
                 null) && (
                 <Tooltip tooltipRequired={tooltipRequired} title={_("Pause game")}>
                     <a onClick={goban_controller.pauseGame}>
@@ -467,7 +484,13 @@ export function GameDock({
                                 return goban_controller.startReview();
                             }
                         }}
-                        className={goban.isAnalysisDisabled() || user.anonymous ? "disabled" : ""}
+                        className={
+                            goban.isAnalysisDisabled() ||
+                            user.anonymous ||
+                            (user_is_player && phase !== "finished")
+                                ? "disabled"
+                                : ""
+                        }
                     >
                         <i className="fa fa-refresh"></i> {_("Review this game")}
                     </a>
@@ -514,29 +537,45 @@ export function GameDock({
                     {review ? _("Link to review") : _("Link to game")}
                 </a>
             </Tooltip>
-            {sgf_download_enabled ? (
-                <Tooltip tooltipRequired={tooltipRequired} title={_("Download SGF")}>
-                    <a href={sgf_url} target="_blank">
-                        <i className="fa fa-download"></i> {_("Download SGF")}
-                    </a>
-                </Tooltip>
-            ) : (
+            <Tooltip tooltipRequired={tooltipRequired} title={_("Download SGF")}>
                 <a
-                    className="disabled"
-                    onClick={() =>
-                        void alert.fire(
-                            _(
-                                "SGF downloading for this game is disabled until the game is complete.",
-                            ),
-                        )
+                    href={sgf_url}
+                    target="_blank"
+                    onClick={(ev) => {
+                        if (ev.currentTarget.className.indexOf("disabled") !== -1) {
+                            ev.preventDefault();
+                        }
+                    }}
+                    className={
+                        !sgf_download_enabled ||
+                        (phase !== "finished" &&
+                            (user.anonymous ||
+                                user.id === engine.config.black_player_id ||
+                                user.id === engine.config.white_player_id))
+                            ? "disabled"
+                            : ""
                     }
                 >
                     <i className="fa fa-download"></i> {_("Download SGF")}
                 </a>
-            )}
+            </Tooltip>
             {sgf_download_enabled && game && (
                 <Tooltip tooltipRequired={tooltipRequired} title={_("Add SGF to my library")}>
-                    <a onClick={addSGFToLibrary} className={user.anonymous ? "disabled" : ""}>
+                    <a
+                        onClick={(ev) => {
+                            if (ev.currentTarget.className.indexOf("disabled") === -1) {
+                                addSGFToLibrary();
+                            }
+                        }}
+                        className={
+                            user.anonymous ||
+                            (phase !== "finished" &&
+                                (user.id === engine.config.black_player_id ||
+                                    user.id === engine.config.white_player_id))
+                                ? "disabled"
+                                : ""
+                        }
+                    >
                         <i className="fa fa-plus"></i> {_("Add to library")}
                     </a>
                 </Tooltip>
@@ -628,6 +667,13 @@ export function GameDock({
                 <Tooltip tooltipRequired={tooltipRequired} title={"Log"}>
                     <a onClick={showLogModal}>
                         <i className="fa fa-list-alt"></i> {"Log"}
+                    </a>
+                </Tooltip>
+            )}
+            {(user_can_intervene || user_can_annul) && (
+                <Tooltip tooltipRequired={tooltipRequired} title={"Move Metadata"}>
+                    <a onClick={showMoveMetadataModal}>
+                        <i className="fa fa-list"></i> {"Move Metadata"}
                     </a>
                 </Tooltip>
             )}

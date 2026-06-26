@@ -30,6 +30,7 @@ import { Toggle } from "@/components/Toggle";
 import { LoadingPage } from "@/components/Loading";
 import { toast } from "@/lib/toast";
 import { PriceIncreaseMessage } from "@/components/PriceIncreaseMessage";
+import "./Supporter.css";
 
 interface SupporterProperties {
     inline?: boolean;
@@ -193,6 +194,7 @@ function guessCurrency(config: Config, country: string): string {
 
 export function Supporter(props: SupporterProperties): React.ReactElement {
     const params = useParams();
+
     const user = data.get("user");
     const inline = props?.inline;
     const account_id = parseInt((params?.account_id || user?.id || "0") as string);
@@ -240,6 +242,9 @@ export function Supporter(props: SupporterProperties): React.ReactElement {
     const [prizes, setPrizes] = React.useState<Service[]>([]);
 
     React.useEffect(() => {
+        if (!inline) {
+            window.document.title = _("Support OGS");
+        }
         Promise.all([
             get(`/billing/summary/${Math.max(0, account_id)}`)
                 .then((config: Config) => {
@@ -293,7 +298,7 @@ export function Supporter(props: SupporterProperties): React.ReactElement {
             .then(ignore)
             .catch(ignore)
             .finally(() => setLoading(false));
-    }, [account_id, refresh]);
+    }, [account_id, refresh, inline]);
 
     if (error) {
         return (
@@ -310,6 +315,7 @@ export function Supporter(props: SupporterProperties): React.ReactElement {
 
     const common_description = [
         _("Double the max vacation time and accrual rate"),
+        _("Automatic vacation activation"),
         _("Golden name (optional)"),
         _("Access to Site Supporters channel"),
         pgettext("Easily cancel the supporter subscription plan anytime", "Easily cancel anytime"),
@@ -577,7 +583,12 @@ export function Supporter(props: SupporterProperties): React.ReactElement {
                                         <PaymentMethod payment={p} />
                                         <span className="status">
                                             {p.currency ? (
-                                                p.status === "succeeded" ? (
+                                                p.status === "refunded" ? (
+                                                    <i
+                                                        className="fa fa-undo"
+                                                        title={_("Refunded")}
+                                                    />
+                                                ) : p.status === "succeeded" ? (
                                                     <i className="fa fa-check" />
                                                 ) : (
                                                     <i className="fa fa-times" />
@@ -768,7 +779,11 @@ export function PriceBox({
         <div className="PriceBox">
             <h1>{price.title}</h1>
 
-            <ul>{price.description?.map((s, idx) => <li key={idx}>{s}</li>)}</ul>
+            <ul>
+                {price.description?.map((s, idx) => (
+                    <li key={idx}>{s}</li>
+                ))}
+            </ul>
 
             {
                 /* don't remove this. We want the translations to stick around
@@ -1182,8 +1197,12 @@ function PaymentMethod({ payment }: { payment: Payment }): React.ReactElement {
             );
         }
         if (payment.payment_processor === "paddle") {
+            const subscriptionId = payment.ref_id.split(":")[0];
             return (
-                <a href={`https://paddle.com/orders/detail/${payment.ref_id}`} target="_blank">
+                <a
+                    href={`https://vendors.paddle.com/subscriptions/customers/manage/${subscriptionId}`}
+                    target="_blank"
+                >
                     {ret}
                 </a>
             );

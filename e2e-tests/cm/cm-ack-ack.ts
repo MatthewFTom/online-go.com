@@ -24,12 +24,14 @@
  * - E2E_CM_AA_V1, E2E_CM_AA_V2, E2E_CM_AA_V3 : assessors who vote
  */
 
-import { Browser, TestInfo } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo } from "@playwright/test";
 
 import {
-    assertIncidentReportIndicatorActive,
-    assertIncidentReportIndicatorInactive,
+    captureReportNumber,
     goToUsersFinishedGame,
+    navigateToReport,
     newTestUsername,
     prepareNewUser,
     reportUser,
@@ -39,23 +41,31 @@ import {
 import { expectOGSClickableByName } from "@helpers/matchers";
 import { expect } from "@playwright/test";
 
-import { withIncidentIndicatorLock } from "@helpers/report-utils";
+import { withReportCountTracking } from "@helpers/report-utils";
 
 export const cmAckAcknowledgementTest = async (
-    { browser }: { browser: Browser },
+    {
+        createContext,
+    }: { createContext: (options?: CreateContextOptions) => Promise<BrowserContext> },
     testInfo: TestInfo,
 ) => {
-    await withIncidentIndicatorLock(testInfo, async () => {
-        const { userPage: reporterPage } = await prepareNewUser(
-            browser,
-            newTestUsername("CmAAReporter"), // cspell:disable-line
-            "test",
-        );
+    const { userPage: reporterPage } = await prepareNewUser(
+        createContext,
+        newTestUsername("CmAAReporter"), // cspell:disable-line
+        "test",
+    );
 
+    await withReportCountTracking(reporterPage, testInfo, async (tracker) => {
         // Report someone for score cheating
         await goToUsersFinishedGame(reporterPage, "E2E_CM_AA_ACCUSED", "E2E CM AA Game");
 
         await reportUser(reporterPage, "E2E_CM_AA_ACCUSED", "score_cheating", "he's a cheater!");
+
+        // Verify reporter's count increased by 1
+        await tracker.assertCountIncreasedBy(reporterPage, 1);
+
+        // Capture the report number from the reporter's "My Own Reports" page
+        const reportNumber = await captureReportNumber(reporterPage);
 
         // Vote to tell the reporter that there's no score cheating
 
@@ -64,37 +74,35 @@ export const cmAckAcknowledgementTest = async (
         const cmAssessorContexts = [];
         for (const cmUser of cmAssessors) {
             const { seededCMPage: cmPage, seededCMContext: cmContext } = await setupSeededCM(
-                browser,
+                createContext,
                 cmUser,
             );
 
             cmAssessorContexts.push({ CMPage: cmPage, cmContext }); // keep them alive for the duration of the test
 
-            const indicator = await assertIncidentReportIndicatorActive(cmPage, 1);
+            // Navigate directly to the report using the captured report number
+            await navigateToReport(cmPage, reportNumber);
 
-            await indicator.click();
-
-            await expect(cmPage.getByRole("heading", { name: "Reports Center" })).toBeVisible();
-
+            // Verify we can see the report with the message
             await expect(cmPage.getByText("he's a cheater!")).toBeVisible();
 
-            // Select the no cheating...
-            await cmPage.locator('.action-selector input[type="radio"]').nth(2).click();
+            // Select the "no score cheating evident" option
+            await cmPage.locator('input[value="no_score_cheat"]').click();
 
             const voteButton = await expectOGSClickableByName(cmPage, /Vote$/);
             await voteButton.click();
         }
 
-        // The report should no longer be active
-        await assertIncidentReportIndicatorInactive(cmAssessorContexts[0].CMPage);
-
-        // The reporters should no longer have the report active either
-        await assertIncidentReportIndicatorInactive(reporterPage);
+        // After all 3 CMs vote, the reporter should receive an acknowledgement
+        // Wait a moment for the acknowledgement to be generated
+        await reporterPage.waitForTimeout(3000);
 
         // The reporter should see an acknowledgement
         await reporterPage.goto("/");
 
-        await expect(reporterPage.locator("div.AccountWarningAck")).toBeVisible();
+        await expect(reporterPage.locator("div.AccountWarningAck")).toBeVisible({
+            timeout: 15000,
+        });
 
         await expect(
             reporterPage
@@ -134,5 +142,8 @@ export const cmAckAcknowledgementTest = async (
         await expect(playHumanButton).toBeVisible();
         await expect(playComputerButton).toBeEnabled();
         await expect(playHumanButton).toBeEnabled();
+
+        // After clicking OK on the acknowledgement, the count should return to initial
+        await tracker.assertCountReturnedToInitial(reporterPage);
     });
 };

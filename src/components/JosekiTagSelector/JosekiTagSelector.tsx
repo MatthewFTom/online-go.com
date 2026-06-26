@@ -19,6 +19,7 @@ import * as React from "react";
 import { pgettext } from "@/lib/translate";
 
 import Select, { MultiValue } from "react-select";
+import "./JosekiTagSelector.css";
 
 // I have no idea why this is different to the back end type
 // It gets mapped to this from the backend type :shrug:
@@ -50,22 +51,6 @@ export function JosekiTagSelector(props: JosekiTagSelectorProps) {
             onChange={onTagChange}
             getOptionLabel={(o) => pgettext("This is a Joseki Tag", o.label)}
             getOptionValue={(o) => o.value}
-            components={{
-                Option: ({ innerRef, innerProps, isFocused, isSelected, data }) => (
-                    <div
-                        ref={innerRef}
-                        {...innerProps}
-                        className={(isFocused ? "focused " : "") + (isSelected ? "selected" : "")}
-                    >
-                        {
-                            pgettext(
-                                "This is a Joseki Tag",
-                                data.label,
-                            ) /* translation of tag labels is forced in Joseki constructor */
-                        }
-                    </div>
-                ),
-            }}
         />
     );
 }

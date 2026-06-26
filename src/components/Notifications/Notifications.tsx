@@ -33,6 +33,7 @@ import { MODERATOR_POWERS, MOD_POWER_NAMES } from "@/lib/moderation";
 import { notification_manager, Notification } from "./NotificationManager";
 import { ModerationOffer } from "@/components/ModerationOffer";
 import { player_is_ignored } from "@/components/BlockPlayer";
+import "./Notifications.css";
 
 export function NotificationList(): React.ReactElement {
     const [, setCount] = React.useState<number | undefined>(
@@ -134,6 +135,7 @@ class NotificationEntry extends React.Component<NotificationEntryProps, any> {
             case "gameStarted":
             case "gameEnded":
             case "timecop":
+            case "autoVacation":
             case "gameEnteredStoneRemoval":
             case "gameResumedFromStoneRemoval":
                 if (notification.game_id === undefined) {
@@ -300,6 +302,15 @@ class NotificationEntry extends React.Component<NotificationEntryProps, any> {
                     </div>
                 );
             }
+
+            case "autoVacation":
+                return (
+                    <div>
+                        {_(
+                            "Vacation mode has been automatically activated, to prevent a game timing out",
+                        )}
+                    </div>
+                );
 
             case "gameEnteredStoneRemoval":
                 return <div>{_("Game has entered the stone removal phase")}</div>;

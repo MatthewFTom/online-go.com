@@ -35,6 +35,7 @@ import { useData } from "@/lib/hooks";
 import { MiniGoban } from "@/components/MiniGoban";
 import { GobanEngineConfig, setGobanRenderer } from "goban";
 import { Toggle } from "@/components/Toggle";
+import "./ThemePreferences.css";
 
 const sample_board_data: GobanEngineConfig = {
     width: 3,
@@ -93,6 +94,7 @@ export function ThemePreferences(): React.ReactElement | null {
     const [visual_undo_request_indicator, setVisualUndoRequestIndicator] = usePreference(
         "visual-undo-request-indicator",
     );
+    const [fuzzy_stone_placement, setFuzzyStonePlacement] = usePreference("fuzzy-stone-placement");
     const [last_move_opacity, _setLastMoveOpacity] = usePreference("last-move-opacity");
     const [stone_font_scale, _setStoneFontScale] = usePreference("stone-font-scale");
 
@@ -585,7 +587,22 @@ export function ThemePreferences(): React.ReactElement | null {
                 </div>
             </PreferenceLine>
 
-            <PreferenceLine title={"Use old canvas goban renderer"}>
+            <PreferenceLine
+                title={_("Fuzzy stone placement")}
+                description={_(
+                    "Slightly reduce stone size and shift stones off-center within each intersection.",
+                )}
+            >
+                <Toggle
+                    checked={fuzzy_stone_placement}
+                    onChange={(tf) => {
+                        setFuzzyStonePlacement(tf);
+                        setTimeout(() => refresh((x) => x + 1), 50);
+                    }}
+                />
+            </PreferenceLine>
+
+            <PreferenceLine title={_("Use old canvas goban renderer")}>
                 <Toggle
                     checked={canvas_enabled === "enabled"}
                     onChange={(tf) => {

@@ -1,0 +1,39 @@
+/*
+ * Copyright (C)  Online-Go.com
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU Affero General Public License as
+ * published by the Free Software Foundation, either version 3 of the
+ * License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+export type ViewMode = "portrait" | "wide" | "square";
+
+export function goban_view_mode(bar_width?: number): ViewMode {
+    if (!bar_width) {
+        bar_width = 300;
+    }
+
+    const h = window.innerHeight || 1;
+    const w = window.innerWidth || 1;
+    const aspect_ratio = w / h;
+
+    if ((aspect_ratio <= 0.8 || w < bar_width * 2) && w < 1280) {
+        return "portrait";
+    }
+
+    return "wide";
+}
+
+export function goban_view_squashed(): boolean {
+    /* This value needs to match the "dock-inline-height" found in Dock.css */
+    return window.innerHeight <= 500;
+}

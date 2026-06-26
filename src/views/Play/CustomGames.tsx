@@ -35,13 +35,7 @@ import { allocateCanvasOrError } from "goban";
 import { Challenge, ChallengeFilter, ChallengeFilterKey } from "@/lib/challenge_utils";
 //import { challenge } from "@/components/ChallengeModal";
 import { useUser } from "@/lib/hooks";
-import {
-    CellBreaks,
-    ChallengeList,
-    ChallengeListHeaders,
-    RengoList,
-    RengoListHeaders,
-} from "./ChallengeLists";
+import { CellBreaks, ChallengeList, ChallengeListHeaders, RengoList } from "./ChallengeLists";
 //import { PlayContext } from "./context";
 import { anyChallengesToShow, challenge_sort, time_per_move_challenge_sort } from "./utils";
 //import { CreatedChallengeInfo } from "@/lib/types";
@@ -51,6 +45,7 @@ import { RengoTeamManagementPane } from "@/components/RengoTeamManagementPane";
 import { PlayContext } from "./PlayContext";
 import { challenge } from "@/components/ChallengeModal";
 import { active_challenges_emitter, useHaveActiveGameSearch } from "./hooks";
+import "./CustomGames.css";
 
 const CHALLENGE_LIST_FREEZE_PERIOD = 1000; // Freeze challenge list for this period while they move their mouse on it
 
@@ -634,7 +629,7 @@ export function CustomGames(): React.ReactElement {
 
                                 <div className="challenge-row">
                                     <span className="cell break">{_("Short Games")}</span>
-                                    <CellBreaks width={8} />
+                                    <CellBreaks width={9} />
                                 </div>
 
                                 {anyChallengesToShow(filter, live_list) ? (
@@ -656,7 +651,7 @@ export function CustomGames(): React.ReactElement {
                                             "Daily Correspondence",
                                         )}
                                     </span>
-                                    <CellBreaks width={8} />
+                                    <CellBreaks width={9} />
                                 </div>
 
                                 {anyChallengesToShow(filter, correspondence_list) ? (
@@ -669,26 +664,14 @@ export function CustomGames(): React.ReactElement {
                             </div>
                             {filter.showRengo && (
                                 <div id="challenge-list">
-                                    <div className="challenge-row" style={{ marginTop: "1em" }}>
-                                        <span className="cell break">{_("Rengo")}</span>
-                                    </div>
-                                    <table id="rengo-table">
-                                        <thead>
-                                            {anyChallengesToShow(filter, rengo_list) ? (
-                                                <RengoListHeaders />
-                                            ) : null}
-                                        </thead>
-                                        <tbody>
-                                            <RengoList
-                                                filter={filter}
-                                                list={rengo_list}
-                                                show_in_rengo_management_pane={
-                                                    show_in_rengo_management_pane
-                                                }
-                                                rengo_manage_pane_lock={rengo_manage_pane_lock}
-                                            />
-                                        </tbody>
-                                    </table>
+                                    <RengoList
+                                        filter={filter}
+                                        list={rengo_list}
+                                        show_in_rengo_management_pane={
+                                            show_in_rengo_management_pane
+                                        }
+                                        rengo_manage_pane_lock={rengo_manage_pane_lock}
+                                    />
                                 </div>
                             )}
                         </div>

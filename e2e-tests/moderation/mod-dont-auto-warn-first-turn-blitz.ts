@@ -17,8 +17,9 @@
 
 // (No seeded data in use)
 
-import { Browser } from "@playwright/test";
-import { expect } from "@playwright/test";
+import type { CreateContextOptions } from "@helpers";
+
+import { BrowserContext, TestInfo, expect } from "@playwright/test";
 
 import { newTestUsername, prepareNewUser } from "@helpers/user-utils";
 
@@ -28,16 +29,25 @@ import {
     defaultChallengeSettings,
 } from "@helpers/challenge-utils";
 import { clickInTheMiddle } from "@helpers/game-utils";
+import { log } from "@helpers/logger";
 
-export const modDontAutoWarnBlitzTest = async ({ browser }: { browser: Browser }) => {
+export const modDontAutoWarnBlitzTest = async (
+    {
+        createContext,
+    }: {
+        createContext: (options?: CreateContextOptions) => Promise<BrowserContext>;
+    },
+    testInfo: TestInfo,
+) => {
+    testInfo.setTimeout(120 * 1000); // 2 minutes - waits 60s for timeout verification
     const { userPage: challengerPage } = await prepareNewUser(
-        browser,
+        createContext,
         newTestUsername("CmDWBChall"), // cspell:disable-line
         "test",
     );
 
     const escaperUsername = newTestUsername("CmDWBEscaper"); // cspell:disable-line
-    const { userPage: escaperPage } = await prepareNewUser(browser, escaperUsername, "test");
+    const { userPage: escaperPage } = await prepareNewUser(createContext, escaperUsername, "test");
 
     // Challenger challenges the escaper
     await createDirectChallenge(challengerPage, escaperUsername, {
@@ -65,7 +75,7 @@ export const modDontAutoWarnBlitzTest = async ({ browser }: { browser: Browser }
     // Now challenger is waiting for escaper ... eventually escaper times out
     // and challenger gets the ack that we are looking for
 
-    console.log(
+    log(
         "cmDontAutoWarnBlitzTest waiting escaper timeout to not have warning (about a minute)",
     );
 

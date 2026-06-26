@@ -30,11 +30,13 @@ module.exports = {
         "node_modules",
     ],
     moduleNameMapper: {
+        "^@/lib/GobanSocketProxy$": "<rootDir>/src/lib/__mocks__/GobanSocketProxy.ts",
         "^@/(.*)": "<rootDir>/src/$1",
         "^react-dynamic-help$": "<rootDir>/submodules/react-dynamic-help/src",
         "^goban$": "<rootDir>/submodules/goban/src",
         "^goscorer$": "<rootDir>/submodules/goban/src/third_party/goscorer/goscorer",
         "^d3$": "<rootDir>/src/stubs/d3.ts",
+        "^@moderator-ui/(.*)": "<rootDir>/src/stubs/moderator-ui/$1",
     },
     setupFiles: ["./setup-jest.cjs"],
     setupFilesAfterEnv: ["jest-chain", "@testing-library/jest-dom"],

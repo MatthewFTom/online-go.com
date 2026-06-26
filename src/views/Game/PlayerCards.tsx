@@ -23,7 +23,7 @@ import { user_uploads_url } from "@/lib/cdn";
 import { CountDown } from "./CountDown";
 import { Flag } from "@/components/Flag";
 import { ChatPresenceIndicator } from "@/components/ChatPresenceIndicator";
-import { Clock } from "@/components/Clock";
+import { Clock, SGFClock } from "@/components/Clock";
 import { useUser } from "@/lib/hooks";
 import { Player } from "@/components/Player";
 import { lookup, fetch } from "@/lib/player_cache";
@@ -36,6 +36,7 @@ import { usePreference } from "@/lib/preferences";
 import { browserHistory } from "@/lib/ogsHistory";
 import { player_is_ignored } from "@/components/BlockPlayer";
 import { doAnnul } from "@/lib/moderation";
+import "./PlayerCards.css";
 
 type PlayerType = rest_api.games.Player;
 
@@ -281,7 +282,7 @@ export function PlayerCard({
     return (
         <div className={`${color} ${highlight_their_turn} player-container`}>
             <div className="player-icon-clock-row">
-                {player && !!player.id && (
+                {player && !!player.id ? (
                     <div className="player-icon-container" style={player_bg}>
                         {!!auto_resign_expiration && (
                             <div className={`auto-resign-overlay`}>
@@ -294,16 +295,27 @@ export function PlayerCard({
                         </div>
                         <ChatPresenceIndicator channel={chat_channel} userId={player.id} />
                     </div>
+                ) : (
+                    /* Placeholder icon for SGF records (gradient background via CSS) */
+                    !!goban.engine.sgf_time_settings && <div className="player-icon-container" />
                 )}
 
-                {engine.phase !== "finished" && !goban.review_id && (
+                {engine.phase !== "finished" && !goban.review_id ? (
                     <Clock goban={goban} color={color} className="in-game-clock" />
+                ) : (
+                    goban.engine.sgf_time_settings && (
+                        <SGFClock goban={goban} color={color} className="in-game-clock" />
+                    )
                 )}
             </div>
 
             {player && player.rank !== -1 && (
                 <div className={`${color} player-name-container`}>
-                    <Player user={player.id} historical={(!engine.rengo && historical) || player} />
+                    <Player
+                        user={player.id}
+                        historical={(!engine.rengo && historical) || player}
+                        gameId={goban.game_id}
+                    />
                 </div>
             )}
 

@@ -19,12 +19,9 @@ import * as React from "react";
 import { PersistentElement } from "@/components/PersistentElement";
 import { OgsResizeDetector } from "@/components/OgsResizeDetector";
 import { GobanRenderer, GobanRendererConfig } from "goban";
-// Pull this out its own util
-import { goban_view_mode } from "@/views/Game/util";
-//import { generateGobanHook } from "@/views/Game/GameHooks";
+import { goban_view_mode, useGobanControllerOrNull } from "@/components/GobanView";
 
 import { usePreference } from "@/lib/preferences";
-import { useGobanControllerOrNull } from "@/views/Game/goban_context";
 
 interface GobanContainerProps {
     /** The goban to render. If not provided, the goban context goban will be used */
@@ -35,6 +32,14 @@ interface GobanContainerProps {
     onWheel?: React.WheelEventHandler<HTMLDivElement> | undefined;
     /** Additional props to pass to the PersistentElement that wraps the goban_div */
     extra_props?: React.DetailedHTMLProps<React.HTMLAttributes<HTMLDivElement>, HTMLDivElement>;
+    /** Vertical alignment of the rendered goban within the container */
+    verticalAlign?: "center" | "top";
+    /** How to derive the display width used for square-size calculation */
+    sizingMode?: "min" | "width";
+    /** Whether to scale the rendered goban to fully contain within the wrapper */
+    fitMode?: "native" | "contain";
+    /** When true, trust the caller-provided container bounds instead of applying viewport hacks */
+    respectContainerBounds?: boolean;
 }
 
 /**
@@ -45,10 +50,19 @@ export function GobanContainer({
     onResize: onResizeCb,
     onWheel,
     extra_props,
+    verticalAlign = "center",
+    sizingMode = "min",
+    fitMode = "native",
+    respectContainerBounds = false,
 }: GobanContainerProps): React.ReactElement {
     const goban_controller = useGobanControllerOrNull();
     const ref_goban_container = React.useRef<HTMLDivElement>(null);
     const resize_debounce = React.useRef<NodeJS.Timeout | null>(null);
+    const pendingInitialResizeRetryRef = React.useRef<{
+        frame1: number | null;
+        frame2: number | null;
+    } | null>(null);
+    const onResizeRef = React.useRef<(no_debounce?: boolean, do_cb?: boolean) => void>(() => {});
     const [last_move_opacity] = usePreference("last-move-opacity");
 
     if (!goban) {
@@ -57,17 +71,66 @@ export function GobanContainer({
 
     const goban_div = (goban?.config as GobanRendererConfig | undefined)?.board_div;
 
+    const cancelPendingInitialResizeRetry = React.useCallback(() => {
+        const pendingRetry = pendingInitialResizeRetryRef.current;
+        if (!pendingRetry) {
+            return;
+        }
+
+        if (pendingRetry.frame1 !== null) {
+            window.cancelAnimationFrame(pendingRetry.frame1);
+        }
+
+        if (pendingRetry.frame2 !== null) {
+            window.cancelAnimationFrame(pendingRetry.frame2);
+        }
+
+        pendingInitialResizeRetryRef.current = null;
+    }, []);
+
+    const scheduleInitialResizeRetry = React.useCallback(() => {
+        if (pendingInitialResizeRetryRef.current) {
+            return;
+        }
+
+        const pendingRetry = {
+            frame1: null as number | null,
+            frame2: null as number | null,
+        };
+        pendingInitialResizeRetryRef.current = pendingRetry;
+
+        pendingRetry.frame1 = window.requestAnimationFrame(() => {
+            pendingRetry.frame1 = null;
+
+            pendingRetry.frame2 = window.requestAnimationFrame(() => {
+                pendingRetry.frame2 = null;
+                pendingInitialResizeRetryRef.current = null;
+                onResizeRef.current(false);
+            });
+        });
+    }, []);
+
     const recenterGoban = () => {
         if (!ref_goban_container.current || !goban || !goban_div) {
             return;
         }
         const m = goban.computeMetrics();
-        goban_div.style.top = `${
-            Math.ceil(ref_goban_container.current.offsetHeight - m.height) / 2
-        }px`;
-        goban_div.style.left = `${
-            Math.ceil(ref_goban_container.current.offsetWidth - m.width) / 2
-        }px`;
+        const containerWidth = ref_goban_container.current.offsetWidth;
+        const containerHeight = ref_goban_container.current.offsetHeight;
+        const scale =
+            fitMode === "contain" && m.width > 0 && m.height > 0
+                ? Math.min(containerWidth / m.width, containerHeight / m.height)
+                : 1;
+        const scaledWidth = m.width * scale;
+        const scaledHeight = m.height * scale;
+
+        goban_div.style.transformOrigin = "top left";
+        goban_div.style.transform = scale === 1 ? "" : `scale(${scale})`;
+        goban_div.style.top =
+            verticalAlign === "top"
+                ? "0px"
+                : `${Math.ceil((containerHeight - scaledHeight) / 2)}px`;
+        goban_div.style.left = `${Math.ceil((containerWidth - scaledWidth) / 2)}px`;
     };
     const onResize = React.useCallback(
         (no_debounce: boolean = false, do_cb: boolean = true) => {
@@ -92,7 +155,10 @@ export function GobanContainer({
 
             const view_mode = goban_view_mode();
 
-            if (view_mode === "portrait") {
+            if (respectContainerBounds) {
+                ref_goban_container.current.style.removeProperty("min-height");
+                ref_goban_container.current.style.removeProperty("flex-basis");
+            } else if (view_mode === "portrait") {
                 const w = window.innerWidth + 10;
                 if (ref_goban_container.current.style.minHeight !== `${w}px`) {
                     ref_goban_container.current.style.minHeight = `${w}px`;
@@ -107,23 +173,54 @@ export function GobanContainer({
                 }
             }
 
+            const containerWidth = ref_goban_container.current.offsetWidth;
+            const containerHeight = ref_goban_container.current.offsetHeight;
+            if (
+                !Number.isFinite(containerWidth) ||
+                !Number.isFinite(containerHeight) ||
+                containerWidth <= 0 ||
+                containerHeight <= 0
+            ) {
+                if (no_debounce) {
+                    scheduleInitialResizeRetry();
+                }
+                return;
+            }
+
+            cancelPendingInitialResizeRetry();
+
+            const targetDisplayWidth = respectContainerBounds
+                ? Math.min(containerWidth, containerHeight || containerWidth)
+                : sizingMode === "width"
+                  ? containerWidth
+                  : Math.min(containerWidth, containerHeight);
+
             goban.setLastMoveOpacity(last_move_opacity);
             if (no_debounce) {
                 // Debouncing is necessary because setting the square size can be an expensive operation.
-                goban.setSquareSizeBasedOnDisplayWidth(
-                    Math.min(
-                        ref_goban_container.current.offsetWidth,
-                        ref_goban_container.current.offsetHeight,
-                    ),
-                );
+                goban.setSquareSizeBasedOnDisplayWidth(targetDisplayWidth);
             } else {
                 resize_debounce.current = setTimeout(() => onResize(true), 10);
             }
 
             recenterGoban();
         },
-        [goban, goban_div, onResizeCb],
+        [
+            cancelPendingInitialResizeRetry,
+            fitMode,
+            goban,
+            goban_div,
+            onResizeCb,
+            respectContainerBounds,
+            scheduleInitialResizeRetry,
+            sizingMode,
+            verticalAlign,
+        ],
     );
+
+    React.useEffect(() => {
+        onResizeRef.current = onResize;
+    }, [onResize]);
 
     React.useEffect(() => {
         if (!goban || !goban_div || !ref_goban_container.current) {
@@ -131,6 +228,8 @@ export function GobanContainer({
         }
         onResize(/* no_debounce */ true, /* do_cb */ true);
     }, [goban, goban_div, ref_goban_container.current, onResize]);
+
+    React.useEffect(() => cancelPendingInitialResizeRetry, [cancelPendingInitialResizeRetry]);
 
     if (!goban || !goban_div) {
         return <React.Fragment />;

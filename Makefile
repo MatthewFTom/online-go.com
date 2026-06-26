@@ -25,14 +25,14 @@ stage1-dev: node_modules .husky
 stage2-dev: node_modules .husky
 	export OGS_BACKEND=LOCAL OGS_PORT=8002 && npm run dev
 
-.husky: 
-	npx husky install
+.husky:
+	npx husky
 
 node_modules: package.json
 	npm ls yarn || npm install yarn
 	yarn install
 
-pretty prettier lint-fix:
+pretty prettier lint-fix format:
 	npm run prettier
 	npm run lint:fix
 	
@@ -43,6 +43,10 @@ analyze visualizer bundle-visualizer:
 test:
 	npm run test
 
-.PHONY: dev build test analyze pretty prettier lint-fix .husky visualizer bundle-visualizer
+GOBAN_SOCKET_WORKER_VERSION=0.2
+update-worker: build
+	cp dist/modules/GobanSocketWorkerScript.js ../ogs-node/src/GobanSocketWorker/GobanSocketWorkerScript-$(GOBAN_SOCKET_WORKER_VERSION).js
+
+.PHONY: dev build test analyze pretty prettier lint-fix .husky visualizer bundle-visualizer update-worker
 
 -include Makefile.production

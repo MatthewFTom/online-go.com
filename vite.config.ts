@@ -20,18 +20,49 @@ import react from "@vitejs/plugin-react";
 //import circularDependency from "vite-plugin-circular-dependency";
 import fixReactVirtualized from "esbuild-plugin-react-virtualized";
 import path from "path";
-import { promises as fs, accessSync } from "fs";
+import { promises as fs, accessSync, readFileSync } from "fs";
 import { IncomingMessage } from "http";
 import http from "http";
 import checker from "vite-plugin-checker";
+import comment from "postcss-comment";
+import atImportGlob from "postcss-import-ext-glob";
 import atImport from "postcss-import";
+import mixins from "postcss-mixins";
+import nested from "postcss-nested";
+import simpleVars from "postcss-simple-vars";
+import functions from "postcss-functions";
+import postcssUrl from "postcss-url";
 import inline_svg from "postcss-inline-svg";
+import viewportUnitFallback from "postcss-viewport-unit-fallback";
 import autoprefixer from "autoprefixer";
+import cssnano from "cssnano";
+import Color from "color";
 import { nodePolyfills } from "vite-plugin-node-polyfills";
+import cssSourcemap from "vite-plugin-css-sourcemap";
+import { execSync } from "child_process";
 
+const _workerVersionMatch = readFileSync(path.resolve(__dirname, "Makefile"), "utf-8").match(
+    /^GOBAN_SOCKET_WORKER_VERSION=(.+)$/m,
+);
+if (!_workerVersionMatch) {
+    throw new Error("GOBAN_SOCKET_WORKER_VERSION not found in Makefile");
+}
+const GOBAN_SOCKET_WORKER_VERSION = _workerVersionMatch[1].trim();
 const OGS_I18N_BUILD_MODE = (process.env.OGS_I18N_BUILD_MODE || "false").toLowerCase() === "true";
 let OGS_BACKEND = process.env.OGS_BACKEND;
 OGS_BACKEND = OGS_BACKEND ? OGS_BACKEND.toUpperCase() : "BETA";
+
+// Get version information for chunk naming
+function getVersionInfo(): string {
+    try {
+        // Try to get git version (format: 5.1-8740-g70dbb6a6)
+        const gitVersion = execSync("git describe --long", { encoding: "utf-8" }).trim();
+        return gitVersion;
+    } catch {
+        console.warn("Could not get git version, using timestamp");
+        return Date.now().toString();
+    }
+}
 
 const SUPPORTED_BACKENDS = ["BETA", "PRODUCTION", "LOCAL"] as const;
 if (process.env.OGS_BACKEND && !SUPPORTED_BACKENDS.includes(OGS_BACKEND as any)) {
@@ -56,6 +87,7 @@ const proxy: Record<string, ProxyOptions> = {};
 // REST api proxies
 for (const base_path of [
     "/api",
+    "/api-docs",
     "/termination-api",
     "/merchant",
     "/billing",
@@ -66,7 +98,9 @@ for (const base_path of [
     "/OGSScoreEstimator",
     "/oje",
     "/firewall",
+    "/fair_play",
     "/__debug__",
+    "/static",
 ]) {
     proxy[base_path] = {
         target: backend_url,
@@ -100,25 +134,50 @@ proxy["^/$"] = {
 
 export default defineConfig({
     root: "src",
+    // Use relative paths so assets resolve correctly when loaded from CDN
+    // Without this, Vite generates absolute paths (/) that resolve to document origin
+    // instead of the CDN where the scripts are actually loaded from
+    base: "./",
 
     build: !OGS_I18N_BUILD_MODE
         ? {
               // This is our production build
               outDir: "../dist",
               sourcemap: true,
-              minify: "terser",
+              minify: "esbuild",
+              // Maintain Vite 6 browser support
+              target: ["es2020", "edge88", "firefox78", "chrome87", "safari14"],
               chunkSizeWarningLimit: 1024 * 1024 * 1.5,
               rollupOptions: {
                   input: {
                       ogs: "src/main.tsx",
                   },
                   output: {
-                      assetFileNames: "[name].[ext]",
+                      assetFileNames: (assetInfo) => {
+                          const version = getVersionInfo();
+                          const name = assetInfo.names?.[0]?.replace(/\.[^.]+$/, "") || "";
+
+                          // Main CSS bundle: use .min.css for backwards compatibility with Makefile
+                          if (name === "ogs") {
+                              return `[name].min.[ext]`;
+                          }
+                          // Monaco-vim CSS stays at root (expected by Makefile)
+                          if (name === "monaco-vim") {
+                              return `[name].[ext]`;
+                          }
+                          // Code-split CSS goes to modules/ with version+hash
+                          if (assetInfo.names?.[0]?.endsWith(".css")) {
+                              return `modules/[name]-${version}-[hash].[ext]`;
+                          }
+                          // Other assets
+                          return `[name].[ext]`;
+                      },
                       entryFileNames: "[name].js",
-                      chunkFileNames: (chunkInfo) => {
+                      chunkFileNames: (_chunkInfo) => {
                           // All chunks (including dynamically imported ones) go to modules/
-                          // React.lazy() chunks may not be marked as isDynamicEntry consistently
-                          return "modules/[name]-[hash].js";
+                          // Include version info to ensure cache busting
+                          const version = getVersionInfo();
+                          return `modules/[name]-${version}-[hash].js`;
                       },
                       // No manual chunking - React.lazy() handles dynamic imports naturally
                       manualChunks: undefined,
@@ -131,7 +190,7 @@ export default defineConfig({
               outDir: "../i18n/build/",
               sourcemap: true,
               minify: false,
-              target: "es2015",
+              target: "es2020",
               chunkSizeWarningLimit: 1024 * 1024 * 99,
               rollupOptions: {
                   input: {
@@ -159,16 +218,73 @@ export default defineConfig({
                   },
               },
           },
-    /*
-     * NOTE: We don't use vite css processing for our production builds because
-     * it doesn't support generating sourcemaps in production as of 2025-01-07
-     *
-     * For production, see compile-css.js, which should always kept in sync
-     * with this config.
-     */
+    worker: {
+        rollupOptions: {
+            output: {
+                // Stable filename (no hash) so the termination server can serve
+                // it at a known path.  Cache-busting comes from the version number.
+                entryFileNames: "modules/[name].js",
+            },
+        },
+    },
     css: {
         postcss: {
-            plugins: [atImport(), inline_svg(), autoprefixer() as any],
+            parser: comment,
+            plugins: [
+                atImportGlob(),
+                atImport(),
+                mixins(),
+                nested(),
+                simpleVars(),
+                functions({
+                    functions: {
+                        lighten: (color: string, amount: string) => {
+                            try {
+                                return Color(color)
+                                    .lighten(parseFloat(amount) / 100)
+                                    .hex();
+                            } catch {
+                                return color;
+                            }
+                        },
+                        darken: (color: string, amount: string) => {
+                            try {
+                                return Color(color)
+                                    .darken(parseFloat(amount) / 100)
+                                    .hex();
+                            } catch {
+                                return color;
+                            }
+                        },
+                        desaturate: (color: string, amount: string) => {
+                            try {
+                                return Color(color)
+                                    .desaturate(parseFloat(amount) / 100)
+                                    .hex();
+                            } catch {
+                                return color;
+                            }
+                        },
+                        saturate: (color: string, amount: string) => {
+                            try {
+                                return Color(color)
+                                    .saturate(parseFloat(amount) / 100)
+                                    .hex();
+                            } catch {
+                                return color;
+                            }
+                        },
+                    },
+                }),
+                postcssUrl({ url: "inline" }),
+                inline_svg({
+                    paths: [path.resolve(__dirname, "assets"), path.resolve(__dirname, "src")],
+                }),
+                viewportUnitFallback(),
+                autoprefixer() as any,
+                // Only minify CSS in production
+                ...(process.env.NODE_ENV === "production" ? [cssnano()] : []),
+            ],
         },
         preprocessorMaxWorkers: true,
         devSourcemap: true,
@@ -176,6 +292,7 @@ export default defineConfig({
     define: {
         "process.env.NODE_ENV": JSON.stringify(process.env.NODE_ENV),
         "process.env.OGS_BACKEND": JSON.stringify(OGS_BACKEND),
+        GOBAN_SOCKET_WORKER_VERSION: JSON.stringify(GOBAN_SOCKET_WORKER_VERSION),
 
         /* This is for goban to let it know we are building for a front end, as opposed to server usage */
         CLIENT: true,
@@ -218,16 +335,23 @@ export default defineConfig({
         {
             name: "welcome-message",
             configureServer(server) {
-                server.httpServer?.once("listening", () => {
+                const originalPrintUrls = server.printUrls;
+                server.printUrls = function (...args) {
+                    originalPrintUrls.call(this, ...args);
                     console.log("\n⚫ ⚪ Online-Go.com development server running!");
                     console.log("\n Talking to ", OGS_BACKEND, " backend at ", backend_url, "\n");
                     console.log(
                         "\n⚫ ⚪ Chat with us in Slack at:\n\n   https://join.slack.com/t/online-go/shared_invite/zt-2jww58l2v-iwhhBiVsXNxcD9xm74bIKA\n",
                     );
-                });
+                    console.log(
+                        "  ▶️  TypeScript type checking and ESLint are running in the background...\n",
+                    );
+                };
             },
         },
         process.env.NODE_ENV !== "production" ? nodePolyfills() : null,
+        // Enable CSS sourcemaps in production builds
+        cssSourcemap(),
         // checker relative directory is src/
         //
         !OGS_I18N_BUILD_MODE
@@ -270,6 +394,17 @@ export default defineConfig({
         ),
     },
     optimizeDeps: {
+        // Pre-bundle heavy dependencies for better dev server performance
+        include: [
+            "react",
+            "react-dom",
+            "react-router-dom",
+            "@nivo/line",
+            "@nivo/pie",
+            "d3",
+            "moment",
+            "sweetalert2",
+        ],
         esbuildOptions: {
             plugins: [fixReactVirtualized as any],
         },
@@ -311,6 +446,70 @@ function ogs_vite_middleware(): Plugin {
          */
         configureServer(server: ViteDevServer) {
             return () => {
+                /* Serve /img/* from the repo's asset directories so board/stone textures
+                 * referenced via the CDN-rewritten base URL resolve against local disk in dev.
+                 * Roots are searched in order; the anime_*.svg assets live in the goban
+                 * submodule only, so we need it as a fallback.
+                 * In production, the contents of these directories are mirrored onto the CDN.
+                 *
+                 * /img/ is treated as a dev-only mount: a miss returns 404 instead of
+                 * falling through to the SPA catch-all (which would 200 + index.html and
+                 * hide the problem). This is safe because /img/ is never used for SPA
+                 * routes; it is reserved for CDN-mirrored repo assets. */
+                const assetRoots = [
+                    path.resolve(__dirname, "assets/img"),
+                    path.resolve(__dirname, "submodules/goban/assets/img"),
+                ];
+                const mimeByExt: Record<string, string> = {
+                    ".jpg": "image/jpeg",
+                    ".jpeg": "image/jpeg",
+                    ".png": "image/png",
+                    ".svg": "image/svg+xml",
+                    ".webp": "image/webp",
+                    ".gif": "image/gif",
+                };
+                server.middlewares.use(async (req, res, next) => {
+                    const url = req.originalUrl || "";
+                    const match = url.match(/^\/+img\/([^?#]+)/);
+                    if (!match) {
+                        return next();
+                    }
+                    const send404 = (msg: string) => {
+                        res.statusCode = 404;
+                        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+                        res.setHeader("Cache-Control", "no-cache");
+                        res.end(msg);
+                    };
+                    const rel = match[1];
+                    for (const root of assetRoots) {
+                        const file = path.resolve(root, rel);
+                        if (file !== root && !file.startsWith(root + path.sep)) {
+                            continue;
+                        }
+                        try {
+                            const body = await fs.readFile(file);
+                            const ext = path.extname(file).toLowerCase();
+                            res.setHeader(
+                                "Content-Type",
+                                mimeByExt[ext] || "application/octet-stream",
+                            );
+                            res.setHeader("Cache-Control", "no-cache");
+                            res.end(body);
+                            return;
+                        } catch (err) {
+                            const code = (err as NodeJS.ErrnoException).code;
+                            if (code === "ENOENT" || code === "EISDIR") continue;
+                            return next(err);
+                        }
+                    }
+                    send404(
+                        `Not Found: /img/${rel}\n` +
+                            `Looked in:\n` +
+                            assetRoots.map((r) => `  ${r}\n`).join("") +
+                            `Add the file to one of those directories or check the filename.\n`,
+                    );
+                });
+
                 /* Handle our custom index template, serve it for anything that doesn't look like a file */
                 server.middlewares.use(async (req, res, next) => {
                     const url = req.originalUrl || "";

@@ -139,48 +139,27 @@ export function canStartFullReview(
     goban: GobanRenderer,
 ): boolean {
     try {
+        // Moderators can start reviews for any game
         if (
-            user.id === goban_controller.creator_id ||
-            user.id === goban.engine?.players?.black?.id ||
-            user.id === goban.engine?.players?.white?.id
-        ) {
-            return true;
-        } else if (
             user.is_moderator ||
             ((user.moderator_powers ?? 0) & MODERATOR_POWERS.AI_DETECTOR) !== 0
         ) {
+            return true;
+        }
+
+        // Creators and players can start reviews if they are supporters
+        const isCreatorOrPlayer =
+            user.id === goban_controller.creator_id ||
+            user.id === goban.engine?.players?.black?.id ||
+            user.id === goban.engine?.players?.white?.id;
+
+        if (isCreatorOrPlayer && user.supporter) {
             return true;
         }
     } catch {
         // no problem, just someone else's sgf or something
     }
     return false;
-}
-
-/**
- * Determines if a user can request AI analysis of a variation
- * @param user Current user with anonymous and supporter flags
- * @param goban The goban instance
- * @param goban_controller Controller for the goban
- * @returns True if user can request variation analysis
- */
-export function canRequestVariationAnalysis(
-    user: rest_api.UserConfig,
-    goban: GobanRenderer,
-    goban_controller: GobanController,
-): boolean {
-    if (user.anonymous) {
-        return false;
-    }
-    if (!user.supporter) {
-        return false;
-    }
-
-    const black_id = goban?.engine?.config?.black_player_id;
-    const white_id = goban?.engine?.config?.white_player_id;
-    const creator_id = goban_controller.creator_id || goban?.review_controller_id;
-
-    return user.id === black_id || user.id === white_id || user.id === creator_id;
 }
 
 // ==================== AI Marks Utils ====================

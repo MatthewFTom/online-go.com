@@ -19,12 +19,14 @@ import * as React from "react";
 import { _ } from "@/lib/translate";
 import { MiniGoban } from "@/components/MiniGoban";
 import { GobanRenderer } from "goban";
-import { GameTimings, GameChat, GobanControllerContext } from "@/views/Game";
+import { GameChat, GobanControllerContext } from "@/views/Game";
+import { GameTimings } from "@moderator-ui/GameTimings";
 import { AIReview } from "@/components/AIReview";
 import { GobanController } from "@/lib/GobanController";
 import { Player } from "@/components/Player";
 import { Resizable } from "@/components/Resizable";
 import { post, put } from "@/lib/requests";
+import "./AnnulQueueModal.css";
 
 // Define the AnnulQueueModalProps interface
 interface AnnulQueueModalProps {
@@ -34,6 +36,7 @@ interface AnnulQueueModalProps {
     onClose: () => void;
     forDetectedAI: boolean;
     player?: any;
+    criteriaString?: string;
 }
 
 // Define the AnnulQueueModal component
@@ -44,6 +47,7 @@ export function AnnulQueueModal({
     onClose,
     forDetectedAI,
     player,
+    criteriaString,
 }: AnnulQueueModalProps) {
     // Declare state variables
     const [selectedGameIndex, setSelectedGameIndex] = React.useState(0);
@@ -187,7 +191,15 @@ export function AnnulQueueModal({
             }
             moderationNote = moderationNote.trim();
         } while (moderationNote === "");
-        return `player ${currentPlayer.id} mass annul: ${moderationNote}`;
+
+        let fullNote = `player ${currentPlayer.id} mass annul: ${moderationNote}`;
+
+        // Append criteria string if this is for detected AI and we have criteria
+        if (forDetectedAI && criteriaString) {
+            fullNote += ` [criteria: ${criteriaString}]`;
+        }
+
+        return fullNote;
     };
 
     // Annul the specified games
@@ -277,7 +289,7 @@ export function AnnulQueueModal({
                         <div className="game">
                             {currentGame && (
                                 <MiniGoban
-                                    key={selectedGameIndex}
+                                    key={currentGame.id}
                                     game_id={currentGame.id}
                                     noLink={true}
                                     onGobanCreated={onGobanCreated}
@@ -301,6 +313,7 @@ export function AnnulQueueModal({
                                         </div>
 
                                         <AIReview
+                                            key={currentGame.id}
                                             onAIReviewSelected={(r) => setAiReviewUuid(r?.uuid)}
                                             game_id={currentGame.id}
                                             move={goban.engine.cur_move}
@@ -322,6 +335,7 @@ export function AnnulQueueModal({
 
                                     <div className="col">
                                         <GameTimings
+                                            key={currentGame.id}
                                             moves={goban.engine.config.moves || []}
                                             start_time={goban.engine.config.start_time || 0}
                                             end_time={goban.engine.config.end_time || 0}
@@ -336,6 +350,7 @@ export function AnnulQueueModal({
 
                                     <div className="col">
                                         <GameChat
+                                            key={currentGame.id}
                                             channel={`game-${currentGame.id}`}
                                             game_id={currentGame.id}
                                         />

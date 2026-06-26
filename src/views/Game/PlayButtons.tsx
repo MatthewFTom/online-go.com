@@ -30,11 +30,173 @@ import {
 } from "./GameHooks";
 import * as DynamicHelp from "react-dynamic-help";
 import { useGobanController } from "./goban_context";
+import { useUser } from "@/lib/hooks";
+import { sfx } from "@/lib/sfx";
+import { decodeMoves } from "goban";
 
 const useOfficialMoveNumber = generateGobanHook(
     (goban) => goban!.engine.last_official_move?.move_number || -1,
     ["last_official_move"],
 );
+
+function KeyboardCoordinateInput(): React.ReactElement | null {
+    const goban_controller = useGobanController();
+    const goban = goban_controller.goban;
+    const engine = goban.engine;
+    const [coordinate_input, setCoordinateInput] = React.useState("");
+    const [has_error, setHasError] = React.useState(false);
+    const input_ref = React.useRef<HTMLInputElement>(null);
+    const [keyboard_coordinates_enabled] = preferences.usePreference(
+        "accessibility.keyboard-coordinate-input",
+    );
+
+    const player_to_move = usePlayerToMove(goban);
+    const user_id = useUser().id;
+    const is_my_move = player_to_move === user_id;
+    const official_move_number = useOfficialMoveNumber(goban);
+    const cur_move_number = useCurrentMoveNumber(goban);
+
+    const can_place =
+        is_my_move &&
+        cur_move_number === official_move_number &&
+        engine.phase === "play" &&
+        engine.handicapMovesLeft() === 0;
+
+    // Mirrors the hover behavior from goban's onMouseMove handler
+    // Note: last_hover_square is a protected property, so we use 'as any' to access it
+    const clearHover = React.useCallback(() => {
+        const gobanWithHover = goban as any;
+        const last_hover = gobanWithHover.last_hover_square;
+        if (last_hover) {
+            delete gobanWithHover.last_hover_square;
+            goban.drawSquare(last_hover.x, last_hover.y);
+        }
+    }, [goban]);
+
+    const parseCoordinates = React.useCallback(
+        (input: string): { x: number; y: number } | null => {
+            if (!/^[A-Z]\d{1,2}$/.test(input)) {
+                return null;
+            }
+            try {
+                const moves = decodeMoves(input, engine.width, engine.height);
+                if (moves.length > 0 && moves[0].x >= 0 && moves[0].y >= 0) {
+                    return moves[0];
+                }
+            } catch {
+                return null;
+            }
+            return null;
+        },
+        [engine.width, engine.height],
+    );
+
+    const setHover = React.useCallback(
+        (x: number, y: number) => {
+            (goban as any).last_hover_square = { x, y };
+            goban.drawSquare(x, y);
+        },
+        [goban],
+    );
+
+    const refocusInput = React.useCallback(() => {
+        setTimeout(() => input_ref.current?.focus(), 0);
+    }, []);
+
+    React.useEffect(() => {
+        if (keyboard_coordinates_enabled && can_place && input_ref.current) {
+            input_ref.current.focus();
+        }
+    }, [keyboard_coordinates_enabled, can_place, cur_move_number]);
+
+    React.useEffect(() => {
+        return () => clearHover();
+    }, [clearHover]);
+
+    if (!keyboard_coordinates_enabled) {
+        return null;
+    }
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setCoordinateInput(value);
+
+        if (has_error) {
+            setHasError(false);
+        }
+
+        const input = value.trim().toUpperCase();
+        clearHover();
+
+        if (input) {
+            const coords = parseCoordinates(input);
+            if (coords) {
+                setHover(coords.x, coords.y);
+            }
+        }
+    };
+
+    const handleBlur = () => {
+        clearHover();
+    };
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+
+        const input = coordinate_input.trim();
+        if (!input) {
+            return;
+        }
+
+        const coords = parseCoordinates(input.toUpperCase());
+        if (!coords) {
+            setHasError(true);
+            sfx.play("tutorial-fail");
+            refocusInput();
+            return;
+        }
+
+        try {
+            goban.tapByPrettyCoordinates(input.toUpperCase());
+            setCoordinateInput("");
+            setHasError(false);
+            clearHover();
+            refocusInput();
+        } catch {
+            // Handle illegal moves (occupied spot, ko violation, etc.)
+            setHasError(true);
+            sfx.play("tutorial-fail");
+            refocusInput();
+        }
+    };
+
+    return (
+        <form onSubmit={handleSubmit} className="keyboard-coordinate-input">
+            <label htmlFor="coordinate-input" className="sr-only">
+                {_("Enter stone coordinates")}
+            </label>
+            <input
+                ref={input_ref}
+                id="coordinate-input"
+                type="text"
+                value={coordinate_input}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={has_error ? "reject" : ""}
+                placeholder={_("e.g., D4")}
+                disabled={!can_place}
+                maxLength={3}
+                autoComplete="off"
+                aria-label={_("Enter stone coordinates (e.g., D4, Q16)")}
+                aria-describedby="coordinate-input-help"
+                aria-invalid={has_error}
+            />
+            <span id="coordinate-input-help" className="sr-only">
+                {_("Enter coordinates in format like D4 or Q16, then press Enter to place a stone")}
+            </span>
+        </form>
+    );
+}
 
 interface PlayButtonsProps {
     // This option exists because Cancel Button is placed below
@@ -48,6 +210,7 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
     const engine = goban.engine;
     const phase = engine.phase;
     const zen_mode = useZenMode(goban_controller);
+    const user_id = useUser().id;
 
     const { registerTargetItem } = React.useContext(DynamicHelp.Api);
     const { ref: accept_button, used: signalUndoAcceptUsed } =
@@ -56,7 +219,7 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
     const official_move_number = useOfficialMoveNumber(goban);
     const cur_move_number = useCurrentMoveNumber(goban);
     const player_to_move = usePlayerToMove(goban);
-    const is_my_move = player_to_move === data.get("user").id;
+    const is_my_move = player_to_move === user_id;
     const [in_pushed_analysis, set_in_pushed_analysis] = React.useState(
         goban_controller.in_pushed_analysis,
     );
@@ -88,33 +251,77 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
         };
     }, [goban_controller, goban, set_in_pushed_analysis]);
 
-    const [show_accept_undo, setShowAcceptUndo] = React.useState<boolean>(false);
     React.useEffect(() => {
-        const syncShowAcceptUndo = () => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                if (goban.unstagePendingMove()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        };
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [goban]);
+
+    const [show_accept_undo, setShowAcceptUndo] = React.useState<boolean>(false);
+    const [show_cancel_undo, setShowCancelUndo] = React.useState<boolean>(false);
+    React.useEffect(() => {
+        const syncShowUndoButtons = () => {
             if (in_pushed_analysis) {
+                setShowAcceptUndo(false);
+                setShowCancelUndo(false);
+                return;
+            }
+
+            if (!goban.engine.undo_requested || !goban.engine.isParticipant(user_id)) {
+                setShowAcceptUndo(false);
+                setShowCancelUndo(false);
+                return;
+            }
+
+            const requested_by = goban.engine.undo_requested_by;
+            if (requested_by !== undefined) {
+                setShowAcceptUndo(requested_by !== user_id);
+                setShowCancelUndo(requested_by === user_id);
                 return;
             }
 
             setShowAcceptUndo(
-                goban.engine.playerToMove() === data.get("user").id ||
-                    (goban.submit_move != null &&
-                        goban.engine.playerNotToMove() === data.get("user").id),
+                goban.engine.playerToMove() === user_id ||
+                    (goban.submit_move != null && goban.engine.playerNotToMove() === user_id),
             );
+            setShowCancelUndo(false);
         };
-        syncShowAcceptUndo();
+        syncShowUndoButtons();
 
-        goban.on("cur_move", syncShowAcceptUndo);
-        goban.on("submit_move", syncShowAcceptUndo);
+        goban.on("cur_move", syncShowUndoButtons);
+        goban.on("submit_move", syncShowUndoButtons);
+        goban.on("undo_requested", syncShowUndoButtons);
+        goban.on("undo_canceled", syncShowUndoButtons);
         return () => {
-            goban.off("cur_move", syncShowAcceptUndo);
-            goban.off("submit_move", syncShowAcceptUndo);
+            goban.off("cur_move", syncShowUndoButtons);
+            goban.off("submit_move", syncShowUndoButtons);
+            goban.off("undo_requested", syncShowUndoButtons);
+            goban.off("undo_canceled", syncShowUndoButtons);
         };
-    }, [goban, in_pushed_analysis]);
+    }, [goban, in_pushed_analysis, user_id]);
     const show_undo_requested = useShowUndoRequested(goban);
 
     const onUndo = () => {
+        if (!goban.engine.isParticipant(user_id)) {
+            return;
+        }
+
+        const is_player_turn =
+            user_id === goban.engine.playerToMove() || user_id === goban.engine.playerNotToMove();
+
         if (
-            data.get("user").id === goban.engine.playerNotToMove() &&
+            is_player_turn &&
+            goban.engine.getMoveNumber() > 0 &&
             goban.engine.undo_requested !== goban.engine.getMoveNumber()
         ) {
             goban.requestUndo();
@@ -143,6 +350,10 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
         signalUndoAcceptUsed();
     };
 
+    const cancelUndo = () => {
+        goban.cancelUndo();
+    };
+
     const [submitting_move, setSubmittingMove] = React.useState(false);
     React.useEffect(() => {
         goban.on("submitting-move", setSubmittingMove);
@@ -158,7 +369,6 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
                     <>
                         {cur_move_number >= 1 &&
                             !engine.rengo &&
-                            (player_to_move !== data.get("user").id || engine.is_game_record) &&
                             !((engine.undo_requested ?? -1) >= engine.getMoveNumber()) &&
                             goban.submit_move == null && (
                                 <button className="bold undo-button xs" onClick={onUndo}>
@@ -176,12 +386,21 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
                                         {_("Accept Undo")}
                                     </button>
                                 )}
+                                {show_cancel_undo && (
+                                    <button
+                                        className="bold cancel-undo-button xs"
+                                        onClick={() => cancelUndo()}
+                                    >
+                                        {_("Cancel Undo")}
+                                    </button>
+                                )}
                             </span>
                         )}
                     </>
                 )}
             </span>
             <span>
+                <KeyboardCoordinateInput />
                 {!show_submit &&
                     is_my_move &&
                     engine.handicapMovesLeft() === 0 &&
@@ -212,8 +431,17 @@ export function PlayButtons({ show_cancel = true }: PlayButtonsProps): React.Rea
                 )}
             </span>
             <span>
-                {show_cancel && phase !== "finished" && (
-                    <CancelButton className={!zen_mode ? "bold xs" : "bold xs cancel-button-zen"} />
+                {show_accept_undo && show_undo_requested ? (
+                    <button className="bold reject-undo-button xs" onClick={() => cancelUndo()}>
+                        {_("Reject Undo")}
+                    </button>
+                ) : (
+                    show_cancel &&
+                    phase !== "finished" && (
+                        <CancelButton
+                            className={!zen_mode ? "bold xs" : "bold xs cancel-button-zen"}
+                        />
+                    )
                 )}
             </span>
         </span>

@@ -179,11 +179,39 @@ class ReportManager extends EventEmitter<Events> {
     public moderationQueue(): ReportNotification[] {
         const user = data.get("user");
         const quota = preferences.get("moderator.report-quota");
-        return !quota || this.getHandledTodayCount() < preferences.get("moderator.report-quota")
-            ? this.getVisibleReports().filter(
-                  (r) => this.userCanModerate(user, r) && !this.userAlreadyVoted(user, r),
-              )
-            : [];
+        if (quota && this.getHandledTodayCount() >= preferences.get("moderator.report-quota")) {
+            return [];
+        }
+
+        const queue = this.getVisibleReports().filter(
+            (r) => this.userCanModerate(user, r) && !this.userAlreadyVoted(user, r),
+        );
+
+        // For community moderators, only show one escaping report per reported
+        // user at a time. This prevents CMs from being overwhelmed by multiple
+        // reports against the same player — they should resolve the oldest one
+        // before seeing the next.
+        if (user.moderator_powers && !user.is_moderator) {
+            // Find the oldest (lowest id) escaping report per reported user
+            const oldest_escaping_by_user = new Map<number, number>();
+            for (const report of queue) {
+                if (report.report_type === "escaping" && report.reported_user?.id) {
+                    const user_id = report.reported_user.id;
+                    const existing = oldest_escaping_by_user.get(user_id);
+                    if (existing === undefined || report.id < existing) {
+                        oldest_escaping_by_user.set(user_id, report.id);
+                    }
+                }
+            }
+            return queue.filter((report) => {
+                if (report.report_type === "escaping" && report.reported_user?.id) {
+                    return oldest_escaping_by_user.get(report.reported_user.id) === report.id;
+                }
+                return true;
+            });
+        }
+
+        return queue;
     }
 
     public getMyReports(): ReportNotification[] {
@@ -240,7 +268,9 @@ class ReportManager extends EventEmitter<Events> {
             if (
                 user.is_moderator &&
                 !(report.moderator?.id === user.id) && // maybe they already have it, so they need to see it
-                ["escaping", "score_cheating", "stalling"].includes(report.report_type)
+                ["escaping", "score_cheating", "stalling", "sandbagging", "thrown_game"].includes(
+                    report.report_type,
+                )
             ) {
                 return false;
             }
@@ -308,7 +338,7 @@ class ReportManager extends EventEmitter<Events> {
     }
 
     public ignore(report_id: number) {
-        const ignored = data.get("ignored-reports") || {};
+        const ignored = { ...(data.get("ignored-reports") || {}) };
         ignored[report_id] = Date.now() + 1000 * 60 * 60 * 24 * 7; // for 7 days
         for (const key in ignored) {
             if (ignored[key] < Date.now()) {
@@ -387,14 +417,12 @@ class ReportManager extends EventEmitter<Events> {
         report_id: number,
         voted_action: string,
         escalation_note: string,
-        dissenter_note: string,
         voter_note: string,
     ): Promise<ReportNotification> {
         return post(`moderation/incident/${report_id}`, {
             action: "vote",
             voted_action: voted_action,
             escalation_note: escalation_note,
-            ...(dissenter_note && { dissenter_note }),
             ...(voter_note && { voter_note }),
         })
             .then((res) => {

@@ -23,6 +23,7 @@ import { dup } from "@/lib/misc";
 import { GameList } from "@/components/GameList";
 import { ActiveAnnouncements } from "@/components/Announcements";
 import { socket } from "@/lib/sockets";
+import "./ObserveGamesComponent.css";
 
 interface ObserveGamesComponentProperties {
     announcements: boolean;
@@ -31,6 +32,10 @@ interface ObserveGamesComponentProperties {
     channel?: string;
     namesByGobans?: boolean;
     preferenceNamespace?: string;
+    forceList?: boolean;
+    initialMiniGoban?: boolean;
+    onSelectGameId?: (gameId: number) => void;
+    compactControls?: boolean;
 }
 
 interface GameListWhere {
@@ -67,6 +72,7 @@ interface ObserveGamesComponentState {
     corr_game_count: number;
     show_filters: boolean;
     force_list: boolean;
+    show_mini_goban: boolean;
     filters: GameListWhere;
 }
 
@@ -93,6 +99,7 @@ export class ObserveGamesComponent extends React.PureComponent<
             corr_game_count: 0,
             show_filters: false,
             force_list: this.namespacedPreferenceGet("observed-games-force-list") as boolean,
+            show_mini_goban: Boolean(this.props.initialMiniGoban),
             filters: this.namespacedPreferenceGet("observed-games-filter") as GameListWhere,
         };
         this.channel = props.channel;
@@ -108,11 +115,19 @@ export class ObserveGamesComponent extends React.PureComponent<
         return preferences.get(key);
     }
 
-    namespacedPreferenceSet(key: preferences.ValidPreference, value: any): any {
+    namespacedPreferenceSet(
+        key: preferences.ValidPreference,
+        value: any,
+        replication?: data.Replication,
+    ): any {
         if (this.props.preferenceNamespace) {
-            return data.set(`observed-games.${this.props.preferenceNamespace}.${key}`, value);
+            return data.set(
+                `observed-games.${this.props.preferenceNamespace}.${key}`,
+                value,
+                replication,
+            );
         }
-        return preferences.set(key, value);
+        return preferences.set(key, value, replication);
     }
 
     syncSubscribe = () => {
@@ -180,7 +195,11 @@ export class ObserveGamesComponent extends React.PureComponent<
     setPageSize = (ev: React.ChangeEvent<HTMLInputElement>) => {
         if (ev.target.value && parseInt(ev.target.value) >= 3 && parseInt(ev.target.value) <= 100) {
             const ct: number = parseInt(ev.target.value);
-            this.namespacedPreferenceSet("observed-games-page-size", ct);
+            this.namespacedPreferenceSet(
+                "observed-games-page-size",
+                ct,
+                data.Replication.REMOTE_OVERWRITES_LOCAL,
+            );
             this.setState({
                 page_size: ct,
                 page_size_text_input: ct,
@@ -288,25 +307,90 @@ export class ObserveGamesComponent extends React.PureComponent<
 
     viewLive = () => {
         this.setState({ viewing: "live", page: 0 });
-        this.namespacedPreferenceSet("observed-games-viewing", "live");
+        this.namespacedPreferenceSet(
+            "observed-games-viewing",
+            "live",
+            data.Replication.REMOTE_OVERWRITES_LOCAL,
+        );
         setTimeout(this.refresh, 1);
     };
     viewCorrespondence = () => {
         this.setState({ viewing: "corr", page: 0 });
-        this.namespacedPreferenceSet("observed-games-viewing", "corr");
+        this.namespacedPreferenceSet(
+            "observed-games-viewing",
+            "corr",
+            data.Replication.REMOTE_OVERWRITES_LOCAL,
+        );
         setTimeout(this.refresh, 1);
     };
 
     toggleShowFilters = () => {
         this.setState({ show_filters: !this.state.show_filters });
     };
-    toggleForceList = () => {
-        this.namespacedPreferenceSet("observed-games-force-list", !this.state.force_list);
-        this.setState({ force_list: !this.state.force_list });
+    toggleGameListView = () => {
+        const nextShowMiniGoban = !this.state.show_mini_goban;
+        this.namespacedPreferenceSet(
+            "observed-games-force-list",
+            !nextShowMiniGoban,
+            data.Replication.REMOTE_OVERWRITES_LOCAL,
+        );
+        this.setState({
+            force_list: !nextShowMiniGoban,
+            show_mini_goban: nextShowMiniGoban,
+        });
     };
+
+    private renderPageControls(compact = false): React.ReactElement | null {
+        const showPagination = Boolean(
+            this.state.num_pages && this.state.num_pages > (compact ? 1 : 0),
+        );
+
+        if (compact && !showPagination) {
+            return null;
+        }
+
+        return (
+            <div className={"page-controls" + (compact ? " page-controls-compact" : "")}>
+                {showPagination && (
+                    <div className="left">
+                        {(this.state.page as number) > 1 ? (
+                            <i className="fa fa-step-backward" onClick={this.prevPage} />
+                        ) : (
+                            <i className="fa" />
+                        )}
+                        <input onChange={this.setPage} value={this.state.page} />
+                        <span className="of"> / </span>
+                        <span className="total">{this.state.num_pages.toString()}</span>
+                        {(this.state.page as number) < this.state.num_pages ? (
+                            <i className="fa fa-step-forward" onClick={this.nextPage} />
+                        ) : (
+                            <i className="fa" />
+                        )}
+                    </div>
+                )}
+
+                {!compact ? (
+                    <div className="right">
+                        <label className="label_show">{_("Show") + ":"}</label>
+                        <input
+                            className="show"
+                            onChange={this.setPageSize}
+                            value={this.state.page_size_text_input}
+                            type="number"
+                            min="3"
+                            max="100"
+                            step="1"
+                        />
+                    </div>
+                ) : null}
+            </div>
+        );
+    }
 
     render() {
         const n_filters = Object.keys(this.state.filters).length;
+        const forceList = this.state.force_list || Boolean(this.props.forceList);
+        const compactControls = Boolean(this.props.compactControls);
 
         return (
             <div className="ObserveGamesComponent">
@@ -336,8 +420,11 @@ export class ObserveGamesComponent extends React.PureComponent<
                                     {n_filters ? `(${n_filters})` : ""}
                                 </button>
                                 <button
-                                    className={this.state.force_list ? "active" : ""}
-                                    onClick={this.toggleForceList}
+                                    className={forceList ? "active" : ""}
+                                    onClick={
+                                        this.props.forceList ? undefined : this.toggleGameListView
+                                    }
+                                    disabled={Boolean(this.props.forceList)}
                                 >
                                     <i className="fa fa-list"></i>
                                 </button>
@@ -347,45 +434,7 @@ export class ObserveGamesComponent extends React.PureComponent<
                                 <i className="fa fa-refresh"></i> {_("Refresh")}
                             </button>
 
-                            <div className="page-controls">
-                                {((this.state.num_pages && this.state.num_pages > 0) || null) && (
-                                    <div className="left">
-                                        {(this.state.page as number) > 1 ? (
-                                            <i
-                                                className="fa fa-step-backward"
-                                                onClick={this.prevPage}
-                                            />
-                                        ) : (
-                                            <i className="fa" />
-                                        )}
-                                        <input onChange={this.setPage} value={this.state.page} />
-                                        <span className="of"> / </span>
-                                        <span className="total">
-                                            {this.state.num_pages.toString()}
-                                        </span>
-                                        {(this.state.page as number) < this.state.num_pages ? (
-                                            <i
-                                                className="fa fa-step-forward"
-                                                onClick={this.nextPage}
-                                            />
-                                        ) : (
-                                            <i className="fa" />
-                                        )}
-                                    </div>
-                                )}
-                                <div className="right">
-                                    <label className="label_show">{_("Show") + ":"}</label>
-                                    <input
-                                        className="show"
-                                        onChange={this.setPageSize}
-                                        value={this.state.page_size_text_input}
-                                        type="number"
-                                        min="3"
-                                        max="100"
-                                        step="1"
-                                    />
-                                </div>
-                            </div>
+                            {!compactControls ? this.renderPageControls() : null}
                         </div>
                     </div>
 
@@ -400,9 +449,12 @@ export class ObserveGamesComponent extends React.PureComponent<
                     emptyMessage={_("No games being played")}
                     miniGobanProps={this.props.miniGobanProps}
                     namesByGobans={this.props.namesByGobans}
-                    forceList={this.state.force_list}
+                    forceList={forceList}
+                    forceMiniGoban={this.state.show_mini_goban}
                     lineSummaryMode={"both-players"}
+                    onSelectGameId={this.props.onSelectGameId}
                 />
+                {compactControls ? this.renderPageControls(true) : null}
             </div>
         );
     }
@@ -423,7 +475,11 @@ export class ObserveGamesComponent extends React.PureComponent<
                 delete new_filters[filter_field];
             }
 
-            self.namespacedPreferenceSet("observed-games-filter", new_filters);
+            self.namespacedPreferenceSet(
+                "observed-games-filter",
+                new_filters,
+                data.Replication.REMOTE_OVERWRITES_LOCAL,
+            );
             self.setState({ filters: new_filters });
             self.syncSubscribe();
             self.refresh();

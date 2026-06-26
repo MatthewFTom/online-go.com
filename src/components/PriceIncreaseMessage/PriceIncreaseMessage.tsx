@@ -20,13 +20,16 @@ import * as data from "@/lib/data";
 import { _, llm_pgettext } from "@/lib/translate";
 import { useUser, useData } from "@/lib/hooks";
 import { Link } from "react-router-dom";
+import "./PriceIncreaseMessage.css";
 
 interface PriceIncreaseMessageProps {
     noDismiss?: boolean;
+    forceShow?: boolean;
 }
 
 export function PriceIncreaseMessage({
     noDismiss,
+    forceShow,
 }: PriceIncreaseMessageProps): React.ReactElement | null {
     const user = useUser();
     const [_dismissed] = useData("price-increase-message-dismissed-timestamp", 0);
@@ -58,7 +61,7 @@ export function PriceIncreaseMessage({
         );
     }, []);
 
-    if (!should_show) {
+    if (!forceShow && !should_show) {
         return null;
     }
 

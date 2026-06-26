@@ -35,9 +35,39 @@ import { usePreference } from "@/lib/preferences";
 import { openAnnulQueueModal, AnnulQueueModal } from "@/components/AnnulQueueModal";
 import { useUser } from "@/lib/hooks";
 import { GameNameForList } from "@/components/GobanLineSummary";
+import { get } from "@/lib/requests";
+import { MODERATOR_POWERS } from "@/lib/moderation";
+import {
+    GameHistoryFilterPopover,
+    SizeFilter,
+    RankedFilter,
+    BotFilter,
+    AnnulledFilter,
+} from "./GameHistoryFilterPopover";
+import "./GameHistoryTable.css";
 
 interface GameHistoryProps {
     user_id: number;
+    is_bot?: boolean;
+}
+
+interface AnnulmentGamesResponse {
+    games: number[];
+    stats: {
+        count: number;
+        player_id: number;
+        detected_game_id: number;
+        settings: {
+            months_threshold: number;
+            games_before: number;
+            games_after: number;
+            smr_threshold: number;
+            smr_delta: number;
+            blur_threshold: number;
+            game_count_threshold: number;
+        };
+        criteria_string: string;
+    };
 }
 
 type ResultClass = `library-${"won" | "lost" | "tie"}-result${
@@ -73,18 +103,34 @@ interface GroomedGame {
 
 export function GameHistoryTable(props: GameHistoryProps) {
     const [player_filter, setPlayerFilter] = React.useState<number>();
-    const [game_history_board_size_filter, setGameHistoryBoardSizeFilter] = React.useState<string>(
-        preferences.get("game-history-size-filter"),
+    const [game_history_board_size_filter, setGameHistoryBoardSizeFilter] =
+        React.useState<SizeFilter>(preferences.get("game-history-size-filter") as SizeFilter);
+    const [game_history_ranked_filter, setGameHistoryRankedFilter] = React.useState<RankedFilter>(
+        preferences.get("game-history-ranked-filter") as RankedFilter,
     );
-    const [game_history_ranked_filter, setGameHistoryRankedFilter] = React.useState<string>(
-        preferences.get("game-history-ranked-filter"),
+    const [game_history_bot_filter, setGameHistoryBotFilter] = React.useState<BotFilter>(
+        preferences.get("game-history-bot-filter"),
     );
+    const [game_history_annulled_filter, setGameHistoryAnnulledFilter] =
+        React.useState<AnnulledFilter>(preferences.get("game-history-annulled-filter"));
+    const effective_bot_filter: BotFilter = props.is_bot ? "bots" : game_history_bot_filter;
+    const show_annulled_styling = effective_bot_filter !== "bots";
+    const effective_annulled_filter: AnnulledFilter =
+        effective_bot_filter === "bots" ? "all" : game_history_annulled_filter;
     const [hide_flags] = usePreference("moderator.hide-flags");
     const [selectModeActive, setSelectModeActive] = React.useState<boolean>(false);
+    const [aiSelectMode, setAiSelectMode] = React.useState<boolean>(false);
     const [annulQueue, setAnnulQueue] = React.useState<any[]>([]);
     const [isAnnulQueueModalOpen, setIsAnnulQueueModalOpen] = React.useState(false);
+    const [detectedGame, setDetectedGame] = React.useState<GroomedGame | null>(null);
+    const [loadingAnnulmentGames, setLoadingAnnulmentGames] = React.useState<boolean>(false);
+    const [criteriaString, setCriteriaString] = React.useState<string>("");
 
     const user = useUser();
+
+    // Check if user has AI detection powers (either full moderator or community moderator with AI_DETECTOR power)
+    const hasAIDetectionPower =
+        user.is_moderator || (user.moderator_powers & MODERATOR_POWERS.AI_DETECTOR) !== 0;
 
     function getBoardSize(size_filter: string): number | undefined {
         switch (size_filter) {
@@ -98,28 +144,63 @@ export function GameHistoryTable(props: GameHistoryProps) {
         throw new Error(`Unknown size filter: ${size_filter}`);
     }
 
+    async function fetchAnnulmentGames(detectedGameId: number, rows: GroomedGame[]) {
+        setLoadingAnnulmentGames(true);
+        try {
+            const response = (await get(`moderation/annulment_games`, {
+                player_id: props.user_id,
+                detected_game_id: detectedGameId,
+            })) as AnnulmentGamesResponse;
+
+            // Find the games in the current table that match the returned IDs
+            const matchingGames = rows.filter((game) => response.games.includes(game.id));
+
+            // Set these as the annul queue and store the criteria string
+            setAnnulQueue(matchingGames);
+            setCriteriaString(response.stats.criteria_string);
+        } catch (error) {
+            console.error("Failed to fetch annulment games:", error);
+            // Show error to user - could use a toast notification here
+            alert("Failed to fetch games matching annulment criteria. Check console for details.");
+        } finally {
+            setLoadingAnnulmentGames(false);
+        }
+    }
+
     function handleRowClick(
         row: GroomedGame,
         ev: React.MouseEvent | React.TouchEvent | React.PointerEvent,
         rows: GroomedGame[],
     ) {
-        if (row.annulled) {
-            return;
-        }
-
         if (selectModeActive) {
+            // "Mass annulment" selection - only for non-annulled games.
+            if (row.annulled) {
+                return;
+            }
+
             if (ev.shiftKey) {
-                if (annulQueue.at(-1)) {
+                if (annulQueue.length > 0 && annulQueue[annulQueue.length - 1]) {
                     window.getSelection()?.removeAllRanges();
                     const indexes = [
-                        rows.findIndex((r) => r.id === annulQueue.at(-1).id),
+                        rows.findIndex((r) => r.id === annulQueue[annulQueue.length - 1].id),
                         rows.findIndex((r) => r.id === row.id),
                     ];
                     const minIndex = Math.min(...indexes);
                     const maxIndex = Math.max(...indexes);
                     setAnnulQueue(rows.slice(minIndex, maxIndex + 1).filter((r) => !r.annulled));
                 }
+            } else if (aiSelectMode) {
+                // AI select mode: first click sets detected game and fetches candidates
+                if (!detectedGame) {
+                    setDetectedGame(row);
+                    // Fetch games matching annulment criteria
+                    void fetchAnnulmentGames(row.id, rows);
+                } else {
+                    // After detected game is set, toggle selection as normal
+                    toggleQueued(row);
+                }
             } else {
+                // Regular select mode: just toggle selection
                 toggleQueued(row);
             }
         } else {
@@ -147,18 +228,24 @@ export function GameHistoryTable(props: GameHistoryProps) {
         setIsAnnulQueueModalOpen(false);
     }
 
-    function toggleBoardSizeFilter(size_filter: string) {
-        const new_size_filter =
-            game_history_board_size_filter === size_filter ? "all" : size_filter;
-        setGameHistoryBoardSizeFilter(new_size_filter);
-        preferences.set("game-history-size-filter", new_size_filter);
+    function handleSizeChange(size: SizeFilter) {
+        setGameHistoryBoardSizeFilter(size);
+        preferences.set("game-history-size-filter", size);
     }
 
-    function toggleRankedFilter(ranked_filter: string) {
-        const new_ranked_filter =
-            game_history_ranked_filter === ranked_filter ? "all" : ranked_filter;
-        setGameHistoryRankedFilter(new_ranked_filter);
-        preferences.set("game-history-ranked-filter", new_ranked_filter);
+    function handleRankedChange(ranked: RankedFilter) {
+        setGameHistoryRankedFilter(ranked);
+        preferences.set("game-history-ranked-filter", ranked);
+    }
+
+    function handleBotChange(bot: BotFilter) {
+        setGameHistoryBotFilter(bot);
+        preferences.set("game-history-bot-filter", bot);
+    }
+
+    function handleAnnulledChange(annulled: AnnulledFilter) {
+        setGameHistoryAnnulledFilter(annulled);
+        preferences.set("game-history-annulled-filter", annulled);
     }
 
     function game_history_groomer(results: rest_api.Game[]): GroomedGame[] {
@@ -215,7 +302,7 @@ export function GameHistoryTable(props: GameHistoryProps) {
             }
 
             item.href = `/game/${item.id as number}`;
-            item.result = getGameResultRichText(r);
+            item.result = getGameResultRichText(r, show_annulled_styling);
             item.flags = r.flags && props.user_id in r.flags ? r.flags[props.user_id] : undefined;
             item.bot_detection_results = r.bot_detection_results ?? undefined;
 
@@ -236,10 +323,11 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             setAnnulQueue={setAnnulQueue}
                             onClose={handleCloseAnnulQueueModal}
                             forDetectedAI={false}
+                            criteriaString={criteriaString}
                         />
                     )}
                     {/* loading-container="game_history.settings().$loading" */}
-                    <div className="game-options">
+                    <div className="GameHistoryTable-options">
                         <div className="search">
                             <i className="fa fa-search"></i>
                             <PlayerAutocomplete
@@ -250,9 +338,29 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             />
                         </div>
                         <div>
-                            {user.is_moderator ? (
+                            {hasAIDetectionPower ? (
                                 <div className="btn-group">
-                                    {annulQueue.length > 0 ? (
+                                    {loadingAnnulmentGames && (
+                                        <span className="loading-indicator">
+                                            <i className="fa fa-spinner fa-spin" />{" "}
+                                            {_("Loading matching games...")}
+                                        </span>
+                                    )}
+                                    {selectModeActive &&
+                                        aiSelectMode &&
+                                        !detectedGame &&
+                                        !loadingAnnulmentGames && (
+                                            <span className="select-detected-prompt">
+                                                {_("(select detected game)")}
+                                            </span>
+                                        )}
+                                    {detectedGame && !loadingAnnulmentGames && (
+                                        <span className="detected-game-indicator">
+                                            {_("Detected game:")} #{detectedGame.id}
+                                        </span>
+                                    )}
+                                    {/* View Queue button is only visible to full moderators */}
+                                    {user.is_moderator && annulQueue.length > 0 ? (
                                         <button
                                             className="sm info"
                                             onClick={() =>
@@ -262,91 +370,90 @@ export function GameHistoryTable(props: GameHistoryProps) {
                                             {_("View Queue")} {`(${annulQueue.length})`}
                                         </button>
                                     ) : null}
+                                    {/* Regular Select button - only for full moderators */}
+                                    {user.is_moderator && (
+                                        <button
+                                            className={
+                                                selectModeActive && !aiSelectMode
+                                                    ? "sm danger"
+                                                    : "sm"
+                                            }
+                                            onClick={() => {
+                                                if (selectModeActive && !aiSelectMode) {
+                                                    // Turn off select mode
+                                                    setSelectModeActive(false);
+                                                } else {
+                                                    // Turn on regular select mode
+                                                    setSelectModeActive(true);
+                                                    setAiSelectMode(false);
+                                                }
+                                                setAnnulQueue([]);
+                                                setDetectedGame(null);
+                                                setCriteriaString("");
+                                            }}
+                                        >
+                                            {_("Select")}
+                                        </button>
+                                    )}
+                                    {/* Select AI button - for AI detection workflow */}
                                     <button
-                                        className={selectModeActive ? "sm danger" : "sm"}
+                                        className={
+                                            selectModeActive && aiSelectMode ? "sm danger" : "sm"
+                                        }
                                         onClick={() => {
-                                            setSelectModeActive(!selectModeActive);
+                                            if (selectModeActive && aiSelectMode) {
+                                                // Turn off select mode
+                                                setSelectModeActive(false);
+                                                setAiSelectMode(false);
+                                            } else {
+                                                // Turn on AI select mode
+                                                setSelectModeActive(true);
+                                                setAiSelectMode(true);
+                                            }
                                             setAnnulQueue([]);
+                                            setDetectedGame(null);
+                                            setCriteriaString("");
                                         }}
                                     >
-                                        {_("Select")}
+                                        {_("Select AI")}
                                     </button>
                                 </div>
                             ) : null}
-                            <div className="btn-group">
-                                <button
-                                    className={
-                                        game_history_board_size_filter === "9x9"
-                                            ? "primary sm"
-                                            : "sm"
-                                    }
-                                    onClick={() => toggleBoardSizeFilter("9x9")}
-                                >
-                                    {_("9x9")}
-                                </button>
-                                <button
-                                    className={
-                                        game_history_board_size_filter === "13x13"
-                                            ? "primary sm"
-                                            : "sm"
-                                    }
-                                    onClick={() => toggleBoardSizeFilter("13x13")}
-                                >
-                                    {_("13x13")}
-                                </button>
-                                <button
-                                    className={
-                                        game_history_board_size_filter === "19x19"
-                                            ? "primary sm"
-                                            : "sm"
-                                    }
-                                    onClick={() => toggleBoardSizeFilter("19x19")}
-                                >
-                                    {_("19x19")}
-                                </button>
-                            </div>
-                            <div className="btn-group">
-                                <button
-                                    className={
-                                        game_history_ranked_filter === "ranked"
-                                            ? "primary sm"
-                                            : "sm"
-                                    }
-                                    onClick={() => toggleRankedFilter("ranked")}
-                                >
-                                    {_("Ranked")}
-                                </button>
-                                <button
-                                    className={
-                                        game_history_ranked_filter === "unranked"
-                                            ? "primary sm"
-                                            : "sm"
-                                    }
-                                    onClick={() => toggleRankedFilter("unranked")}
-                                >
-                                    {_("Unranked")}
-                                </button>
-                            </div>
+                            <GameHistoryFilterPopover
+                                sizeFilter={game_history_board_size_filter}
+                                onSizeChange={handleSizeChange}
+                                rankedFilter={game_history_ranked_filter}
+                                onRankedChange={handleRankedChange}
+                                botFilter={effective_bot_filter}
+                                onBotChange={handleBotChange}
+                                botDisabled={props.is_bot}
+                                annulledFilter={game_history_annulled_filter}
+                                onAnnulledChange={handleAnnulledChange}
+                                annulledHidden={props.is_bot}
+                                annulledDisabled={effective_bot_filter === "bots"}
+                            />
                         </div>
                     </div>
                     <PaginatedTable
-                        className="game-history-table"
+                        className="GameHistoryTable"
                         name="game-history"
                         method="GET"
-                        source={`players/${props.user_id}/games/`}
+                        source={`players/${props.user_id}/game_history/`}
                         filter={{
-                            source: "play",
-                            ended__isnull: false,
+                            bot_game: effective_bot_filter === "bots",
                             ...(player_filter !== undefined && {
-                                alt_player: player_filter,
+                                opponent: player_filter,
                             }),
                             ...(game_history_board_size_filter !== "all" && {
                                 height: getBoardSize(game_history_board_size_filter),
                                 width: getBoardSize(game_history_board_size_filter),
                             }),
-                            ...(game_history_ranked_filter !== "all" && {
-                                ranked: game_history_ranked_filter === "ranked",
-                                annulled: false, // Assume the user wants to filter annulled games
+                            ...(effective_bot_filter !== "bots" &&
+                                game_history_ranked_filter !== "all" && {
+                                    ranked: game_history_ranked_filter === "ranked",
+                                }),
+                            ...(effective_annulled_filter === "hide" && {
+                                annulled: false,
                             }),
                         }}
                         orderBy={["-ended"]}
@@ -358,7 +465,8 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             {
                                 header: _("User"),
                                 className: (X) =>
-                                    "user_info" + (X && X.annulled ? " annulled" : ""),
+                                    "user_info" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => (
                                     <React.Fragment>
                                         <span>
@@ -376,7 +484,8 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             {
                                 header: "",
                                 className: (X) =>
-                                    "winner_marker" + (X && X.annulled ? " annulled" : ""),
+                                    "winner_marker" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) =>
                                     X.player_won ? (
                                         <i className="fa fa-trophy game-history-winner" />
@@ -386,12 +495,22 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             },
                             {
                                 header: _("Date"),
-                                className: (X) => "date" + (X && X.annulled ? " annulled" : ""),
-                                render: (X) => moment(X.date).format("YYYY-MM-DD"),
+                                className: (X) =>
+                                    "date" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
+                                render: (X) => (
+                                    <span>
+                                        <Link to={X.href} onClick={(e) => handleLinkClick(e)}>
+                                            {moment(X.date).format("YYYY-MM-DD")}
+                                        </Link>
+                                    </span>
+                                ),
                             },
                             {
                                 header: _("Opponent"),
-                                className: (X) => "player" + (X && X.annulled ? " annulled" : ""),
+                                className: (X) =>
+                                    "player" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => (
                                     <>
                                         {X.rengo_vs_text ? (
@@ -404,24 +523,30 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             },
                             {
                                 header: "",
-                                className: (X) => "speed" + (X && X.annulled ? " annulled" : ""),
+                                className: (X) =>
+                                    "speed" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => <i className={X.speed_icon_class} title={X.speed} />,
                             },
                             {
                                 header: _("Size"),
                                 className: (X) =>
-                                    "board_size" + (X && X.annulled ? " annulled" : ""),
+                                    "board_size" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => `${X.width}x${X.height}`,
                             },
                             {
                                 header: pgettext("Handicap abbreviation", "HC"),
-                                className: (X) => "handicap" + (X && X.annulled ? " annulled" : ""),
+                                className: (X) =>
+                                    "handicap" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => X.handicap,
                             },
                             {
                                 header: _("Name"),
                                 className: (X) =>
-                                    "game_name" + (X && X.annulled ? " annulled" : ""),
+                                    "game_name" +
+                                    (X && X.annulled && show_annulled_styling ? " annulled" : ""),
                                 render: (X) => (
                                     <Link to={X.href} onClick={(e) => handleLinkClick(e)}>
                                         {!X.name &&
@@ -439,7 +564,10 @@ export function GameHistoryTable(props: GameHistoryProps) {
                             {
                                 header: _("Result"),
                                 className: (X) =>
-                                    X ? X.result_class + (X.annulled ? " annulled" : "") : "",
+                                    X
+                                        ? X.result_class +
+                                          (X.annulled && show_annulled_styling ? " annulled" : "")
+                                        : "",
                                 render: (X) => {
                                     if (
                                         !hide_flags &&
@@ -489,14 +617,14 @@ export function GameHistoryTable(props: GameHistoryProps) {
     );
 }
 
-export function getGameResultRichText(game: rest_api.Game) {
+export function getGameResultRichText(game: rest_api.Game, show_annulled_styling = true) {
     let resultText = getGameResultText(game.outcome, game.white_lost, game.black_lost);
 
     if (game.ranked) {
         resultText += ", ";
         resultText += _("ranked");
     }
-    if (game.annulled) {
+    if (game.annulled && show_annulled_styling) {
         return (
             <span>
                 <span style={{ textDecoration: "line-through" }}>{resultText}</span>
@@ -547,7 +675,9 @@ function getResultClass(game: rest_api.Game, user_id: number): ResultClass {
 
 function getSpeed(game: rest_api.Game): Speed {
     if ("time_control_parameters" in game) {
-        const tcp = JSON.parse(game.time_control_parameters) as TimeControl;
+        const tcp = game.time_control_parameters
+            ? (JSON.parse(game.time_control_parameters) as TimeControl)
+            : undefined;
         if (tcp?.speed) {
             return tcp.speed;
         }

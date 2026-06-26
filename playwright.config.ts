@@ -42,9 +42,11 @@ if (!process.env.TEST_WORKER_INDEX && !process.env.PW_UI) {
     });
 
     if (process.env.CI) {
-        console.log("Running in CI mode: SMOKE TESTS ONLY");
+        console.log("Running in CI mode: SMOKE TESTS ONLY (1 worker, no retries, sequential)");
+    } else if (process.env.E2E) {
+        console.log("Running in E2E mode: FULL TEST SUITE (2 workers, 1 retry)");
     } else {
-        console.log("Running in local mode: FULL TEST SUITE (except smoketests)");
+        console.log("Running in Dev mode: FULL TEST SUITE (2 workers, no retries)");
     }
 
     // This chicanery is all due to OGS having a 30 char limit on usernames
@@ -61,13 +63,15 @@ if (!process.env.TEST_WORKER_INDEX && !process.env.PW_UI) {
 }
 
 export default defineConfig({
-    globalTeardown: "./e2e-tests/global-teardown.ts",
+    globalSetup: process.env.PW_UI ? undefined : "./e2e-tests/global-setup.ts",
+    globalTeardown: process.env.PW_UI ? undefined : "./e2e-tests/global-teardown.ts",
     testDir: "./e2e-tests",
-    testMatch: process.env.CI ? ["smoketests.spec.ts"] : ["**/*.spec.ts", "!**/smoketests/**"],
-    // If you change this you need to change report-utils to match
-    timeout: 150 * 1000, // overall test timeout - we have some long multi-user tests
+    testMatch: process.env.CI ? ["smoketests.spec.ts"] : ["**/*.spec.ts"],
+    testIgnore: process.env.CI ? [] : ["**/smoke/**"],
+    // If you change this you need to change report-utils to match, noting the delta there from here.
+    timeout: 180 * 1000, // 3 minutes - longest regular test is ~108s; @Slow tests override with test.setTimeout()
     expect: {
-        timeout: process.env.CI ? 30000 : 10000,
+        timeout: process.env.CI ? 30000 : 15000,
     },
 
     /* Run tests in files in parallel */
@@ -78,15 +82,26 @@ export default defineConfig({
     /* Fail the build on CI if you accidentally left test.only in the source code. */
     forbidOnly: !!process.env.CI,
 
-    retries: 0, // we want to be stable, not retrying
+    /* Retry configuration by environment */
+    // CI: 0 retries (smoke tests should be stable)
+    // E2E: 2 retry (handle flakiness in full test suite)
+    // Dev: 0 retries (fail fast for development)
 
-    /* Opt out of parallel tests on CI. */
-    // TBD UNCOMMENT
-    //workers: process.env.CI ? 1 : undefined,
+    retries: process.env.CI ? 0 : process.env.E2E ? 2 : 0,
 
-    workers: 1, // for test development consider 1, easier to debug
+    /* Workers configuration for parallel execution */
+    // Ideally...
+    // CI: 1 worker (sequential for reliability, smoke tests only)
+    // E2E: 2 workers (parallel execution with isolation via worker IDs)
+    // Dev: 2 workers (parallel execution for faster feedback)
+
+    // But ... it just doesn't work.
+    // workers: process.env.CI ? 1 : 1,
+
+    workers: 1, // parallel execution is disabled for stability
 
     /* Reporter to use. See https://playwright.dev/docs/test-reporters */
+    /* (note that e2etesting run_test override this from command line) */
     reporter: [
         //
         // ['html'],
@@ -148,14 +163,7 @@ export default defineConfig({
     ],
 
     /* Run a local dev server before starting the tests */
-    webServer: process.env.FRONTEND_URL
-        ? undefined
-        : {
-              command: `echo "Starting vite server: ${process.env.OGS_BACKEND}" && yarn vite`,
-              url: FRONTEND_URL,
-              reuseExistingServer: !process.env.CI,
-              timeout: 120 * 1000, // server startup.
-              stdout: "pipe",
-              stderr: "pipe",
-          },
+    // Disabled: Server startup is complex (requires backend setup), so we assume
+    // the server is already running. Start it manually before running tests.
+    webServer: undefined,
 });

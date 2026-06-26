@@ -35,6 +35,7 @@ import { AIDetection } from "@moderator-ui/AIDetection";
 import { MODERATOR_POWERS } from "@/lib/moderation";
 import { toast } from "@/lib/toast";
 import { CollectionSharingModal } from "@/components/CollectionSharingModal";
+import "./LibraryPlayer.css";
 
 type LibraryPlayerProperties = RouteComponentProps<{
     player_id: string;
@@ -120,6 +121,7 @@ class _LibraryPlayer extends React.PureComponent<LibraryPlayerProperties, Librar
     ];
 
     componentDidMount() {
+        window.document.title = _("Library");
         this.refresh(this.state.player_id).then(ignore).catch(ignore);
     }
     componentDidUpdate(prev_props: LibraryPlayerProperties) {
@@ -292,7 +294,23 @@ class _LibraryPlayer extends React.PureComponent<LibraryPlayerProperties, Librar
     uploadSGFs = (files: File[]) => {
         if (parseInt(this.props.match.params.player_id) === data.get("user").id) {
             files = files.filter((file) => /.sgf$/i.test(file.name));
-            Promise.all(files.map((file) => post(`me/games/sgf/${this.state.collection_id}`, file)))
+            Promise.all(
+                files.map((file) =>
+                    // Read the file into memory before uploading. Files from
+                    // Google Drive via Android Chrome's file picker are backed
+                    // by a content:// URI that may not be fully materialized
+                    // yet, causing fetch() to fail when it tries to read the
+                    // FormData body.
+                    file
+                        .arrayBuffer()
+                        .then((buf) =>
+                            post(
+                                `me/games/sgf/${this.state.collection_id}`,
+                                new File([buf], file.name, { type: "application/x-go-sgf" }),
+                            ),
+                        ),
+                ),
+            )
                 .then(() => {
                     this.refresh(this.props.match.params.player_id).then(ignore).catch(ignore);
                 })
@@ -739,7 +757,9 @@ class _LibraryPlayer extends React.PureComponent<LibraryPlayerProperties, Librar
                             this.dropzone = r;
                         }
                     }}
-                    accept=".sgf"
+                    accept={{
+                        "application/x-go-sgf": [".sgf"],
+                    }}
                     onDrop={this.uploadSGFs}
                     multiple={true}
                     noClick

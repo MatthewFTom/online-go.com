@@ -351,6 +351,7 @@ extended_countries.push(["_Wales", gettext("Wales")]);
 extended_countries.push(["_cat", gettext("Catalonia")]);
 extended_countries.push(["_eus", gettext("Basque Country")]);
 extended_countries.push(["_by-alt", gettext("Belarus (alternative)")]);
+extended_countries.push(["_nz_mi", gettext("Tino Rangatiratanga")]);
 
 const fantasy_countries: [string, string][] = [];
 const fantasy_countries_cc: { [key: string]: boolean } = {};
@@ -412,12 +413,12 @@ export function interpolate(str: string, params: Array<any> | { [key: string]: a
         });
     }
     if (typeof params === "object") {
-        return str.replace(/{{([^}]+)}}/g, (_, key) => {
+        return str.replace(/{{([^}]+)}}/g, (match, key) => {
             if (!(key in params)) {
-                //throw new Error(`Missing interpolation key: ${key} for string: ${str}`);
                 console.warn(`Missing interpolation key: ${key} for string: ${str}`);
+                return match;
             }
-            return params[key];
+            return params[key] ?? "";
         });
     }
     return str.replace(/%[sd]/g, () => params);
@@ -544,6 +545,9 @@ export function setCurrentLanguage(language_code: string) {
         "The game would be repeating with that move, please play somewhere else first": _(
             "The game would be repeating with that move, please play somewhere else first",
         ),
+        "Auto-scoring failed, please manually score the game": _(
+            "Auto-scoring failed, please manually score the game",
+        ),
         Error: _("Error"),
         "Self-capture is not allowed": _("Self-capture is not allowed"),
 
@@ -565,6 +569,8 @@ export function setCurrentLanguage(language_code: string) {
         Slate: _("Slate"),
         "Worn Glass": _("Worn Glass"),
         Anime: _("Anime"),
+        BadukTV: _("BadukTV"),
+        "Community Favorite": _("Community Favorite"),
 
         "%swk": pgettext("Short time (weeks)", "%swk"),
         "%sd": pgettext("Short time (days)", "%sd"),

@@ -17,6 +17,7 @@
 
 import * as React from "react";
 import * as data from "@/lib/data";
+import "./LearningHub.css";
 import * as preferences from "@/lib/preferences";
 import { Link, useParams } from "react-router-dom";
 import { CardLink } from "@/components/material";
@@ -394,6 +395,18 @@ function SectionNav(): React.ReactElement {
     const urlMatch = window.location.pathname.match(/\/learn-to-play-go(\/([^\/]+))?(\/([0-9]+))?/);
     const currentSectionName = urlMatch?.[2] || "";
 
+    const [autoAdvance, setAutoAdvance] = React.useState(() =>
+        preferences.get("learning-hub-auto-advance"),
+    );
+
+    const handleAutoAdvanceToggle = React.useCallback(() => {
+        setAutoAdvance((prev) => {
+            const next = !prev;
+            preferences.set("learning-hub-auto-advance", next);
+            return next;
+        });
+    }, []);
+
     // Memoize reset progress handler
     const handleResetProgress = React.useCallback(() => {
         void alert
@@ -455,9 +468,19 @@ function SectionNav(): React.ReactElement {
                 );
             })}
 
-            <span className="reset-progress" onClick={handleResetProgress}>
-                {pgettext("Reset learning hub progress", "Reset progress")}
-            </span>
+            <div className="section-nav-footer">
+                <label className="auto-advance-toggle">
+                    <input
+                        type="checkbox"
+                        checked={autoAdvance}
+                        onChange={handleAutoAdvanceToggle}
+                    />
+                    {pgettext("Auto advance to next lesson", "Auto advance")}
+                </label>
+                <span className="reset-progress" onClick={handleResetProgress}>
+                    {pgettext("Reset learning hub progress", "Reset progress")}
+                </span>
+            </div>
         </div>
     );
 }

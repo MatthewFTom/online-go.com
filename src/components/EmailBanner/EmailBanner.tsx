@@ -20,9 +20,14 @@ import { browserHistory } from "@/lib/ogsHistory";
 import { _ } from "@/lib/translate";
 import * as data from "@/lib/data";
 import { Card } from "@/components/material";
+import "./EmailBanner.css";
 
-export class EmailBanner extends React.PureComponent {
-    constructor(props: {}) {
+interface EmailBannerProps {
+    forceShow?: boolean;
+}
+
+export class EmailBanner extends React.PureComponent<EmailBannerProps> {
+    constructor(props: EmailBannerProps) {
         super(props);
         // TODO: Remove this
         this.state = {};
@@ -38,12 +43,14 @@ export class EmailBanner extends React.PureComponent {
     };
 
     render() {
-        if (data.get("user").email_validated) {
-            return null;
-        }
+        if (!this.props.forceShow) {
+            if (data.get("user").email_validated) {
+                return null;
+            }
 
-        if (data.get("email-banner-dismissed")) {
-            return null;
+            if (data.get("email-banner-dismissed")) {
+                return null;
+            }
         }
 
         return (

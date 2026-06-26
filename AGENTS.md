@@ -1,152 +1,56 @@
-## Development Commands
+# Project: online-go.com
 
-### Setup
+React/TypeScript frontend for online-go.com. Uses Vite, PostCSS, yarn. `main`
+is the primary trunk git branch.
 
-```bash
-# Clone with submodules
-git clone --recurse-submodules git@github.com:online-go/online-go.com.git
+## Layout
 
-# Install dependencies
-npx yarn install
+- `src/components/` - Shared React components
+- `src/views/` - Page views
+- `src/lib/` - Core utilities (`data.ts`, `sockets.ts`, `preferences.ts`, `GobanController.ts`)
+- `src/models/` - TypeScript types
+- `submodules/goban/` - Go board engine (submodule)
 
-# Install husky for pre-commit hooks
-npx husky install
+## Path Aliases
 
-# Or use make to do all setup
-make
-```
+- `@/*` -> `src/*`
+- `goban` -> `submodules/goban/src`
+- `react-dynamic-help` -> `submodules/react-dynamic-help/src`
 
-### Development Server
+## Rules
 
-```bash
-npm run dev                    # Connect to beta server (default)
-make dev                      # Same as above
-make local-dev                # Connect to local backend
-make point-to-production      # Connect to production server
-make bot-dev                  # Special bot development mode
-```
+- No `any` types. No emojis. Use `yarn` for package management, not `npm`.
+- **One component per file** (required for Vite HMR). Each component gets its own `.tsx` and matching `.css` file. Never define multiple components in one file.
+- Co-locate components used by a single parent in the parent's directory (e.g., `GobanLayout/PlayerInfo.tsx`). Shared components go in `src/components/`.
+- CSS uses PostCSS nested syntax. Shared `$variables` go in `src/global_styl/00_constants.css` and must be explicitly imported. Runtime `var(--name)` variables are in `src/global_styl/01_variables.css`.
+- No pulsing/throbbing animations. No `translateY`/`translateX` on hover. No hover background changes on non-interactive elements.
+- All user-visible strings must be translated. Use `pgettext(context, msgid)` (or `llm_pgettext` for LLM-translated strings), `ngettext`/`npgettext` for plurals, and `interpolate()` for parameterized strings. Import from `@/lib/translate`. See `src/lib/translate.ts` for details.
+- Code must build and pass linting/formatting.
 
-Development server runs on http://dev.beta.online-go.com:8080/
+## Before Committing or Considering a Change Complete
 
-### Build and Type Checking
+Follow [CONTRIBUTING.md](CONTRIBUTING.md) before marking any change as done. In particular:
 
-```bash
-npm run build                 # Production build
-npm run build:i18n           # Internationalization build
-npm run type-check           # TypeScript type checking
-```
+- Run `yarn type-check` to verify TypeScript types compile cleanly.
+- Run `yarn lint` to check for linting errors.
+- Run `yarn prettier:file <modified-files>` to auto-fix formatting on only the files that were modified.
 
-### Code Quality
+Only run the full build once before the final push, since it is slow and not needed in the normal development loop:
 
-```bash
-npm run lint                 # ESLint
-npm run lint:fix             # ESLint with auto-fix
-npm run prettier             # Format code with Prettier
-npm run prettier:check       # Check formatting
-npm run spellcheck           # Spell check TypeScript files
-make pretty                  # Run prettier + lint:fix
-```
+- Run `yarn build` to verify the build succeeds.
 
-### Testing
+Before submitting a PR, remind the author to perform manual testing in both mobile and desktop browsers.
 
-```bash
-npm run test                 # Jest unit tests
-npm run fresh-test           # Clear console and run tests
-npm run test:e2e             # Playwright end-to-end tests
-npm run test:e2e:quick       # E2E tests excluding smoke/slow
-npm run test:e2e:smoke       # Smoke tests only
-npm run test:e2e:ui          # E2E tests with UI
-npm run test:e2e:debug       # E2E tests in debug mode
-npm run test:ci              # Full CI test suite
-```
+## Pull Requests
 
-### Analysis
+- Follow the repository PR template at `.github/pull_request_template.md` when creating pull requests.
 
-```bash
-npm run bundle-visualizer    # Analyze bundle size
-npm run dependency-cruiser   # Check dependencies
-```
+## graphify
 
-## Architecture Overview
+This project has a graphify knowledge graph at graphify-out/.
 
-This is a React/TypeScript application for the Online-Go.com web client, a platform for playing the board game Go online.
-
-### Key Directories
-
--   `src/components/` - React UI components
--   `src/views/` - Main page components/views
--   `src/lib/` - Core utilities and business logic
--   `src/models/` - TypeScript type definitions
--   `submodules/goban/` - Go board engine (git submodule)
--   `submodules/react-dynamic-help/` - Help system
--   `submodules/moderator-ui/` - Moderation interface
-
-### Core Libraries and Systems
-
--   **Game Engine**: Uses custom `goban` library (submodule) for Go game logic
--   **Real-time**: WebSocket connections via `sockets.ts` and `chat_manager.ts`
--   **State Management**: Mix of React state and custom managers
--   **Styling**: Stylus (.styl files) for CSS preprocessing
--   **Testing**: Jest for unit tests, Playwright for E2E tests
--   **Build**: Vite for development and production builds
-
-### Important Core Files
-
--   `src/main.tsx` - Application entry point
--   `src/routes.tsx` - React Router configuration
--   `src/lib/data.ts` - Main data management and API integration
--   `src/lib/preferences.ts` - User preferences management
--   `src/lib/sockets.ts` - WebSocket communication
--   `src/lib/GobanController.ts` - Game board state management
--   `src/lib/chat_manager.ts` - Chat system
-
-### Path Aliases
-
-The project uses TypeScript path mapping:
-
--   `@/*` → `src/*`
--   `goban` → `submodules/goban/src`
--   `goscorer` → `submodules/goban/src/third_party/goscorer/goscorer`
--   `react-dynamic-help` → `submodules/react-dynamic-help/src`
-
-### Backend Integration
-
-The client can connect to different backends via `OGS_BACKEND` environment variable:
-
--   `BETA` (default) - https://beta.online-go.com
--   `PRODUCTION` - https://online-go.com
--   `LOCAL` - http://127.0.0.1:1080
-
-### Component Structure
-
-Most components follow the pattern:
-
-```
-ComponentName/
-├── ComponentName.tsx
-├── ComponentName.styl
-└── index.ts
-```
-
-### Development Notes
-
--   Git submodules are required - clone with `--recurse-submodules`
--   Husky pre-commit hooks enforce linting and formatting
--   Development server hot-reloads on file changes
--   TypeScript strict mode is enabled with comprehensive type checking
--   Components are heavily modularized with 100+ individual components
--   The use of emojis is discouraged, they are unprofessional and tacky
--   Use comments sparingly but should be used to explain complex code or non-obvious code
--   Always ensure the code builds and passes linting and formatting
--   Do not use `any` type, ensure that all variables are correctly typed
-
-### Animation Guidelines
-
--   Avoid disorienting animations like continuous pulsing, throbbing, or looping effects
--   Do not use translate effects on hover (no transform: translateY or translateX)
--   Keep animations subtle and purposeful - prefer opacity and shadow changes over position changes
-
-### Interaction Guidelines
-
--   Background color changes on hover are only allowed for interactive elements (buttons, links, clickable items)
--   Non-interactive elements should not have background color changes on hover
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)

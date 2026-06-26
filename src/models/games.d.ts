@@ -46,7 +46,7 @@ declare namespace rest_api {
         white_player_rating: string; // floating point number
 
         time_per_move: number;
-        time_control_parameters: string; // TimeControl
+        time_control_parameters: string | null; // TimeControl
         disable_analysis: boolean;
         tournament: number | null;
         tournament_round: number;
@@ -223,6 +223,9 @@ declare namespace rest_api {
 
         /** For invalid handicaps that got into the system, don't rate */
         handicap_out_of_range?: boolean;
+
+        /** Game was annulled as part of AI cheating remediation */
+        ai_cheating_remediation?: boolean;
     }
 
     interface AIReviewParams {
@@ -266,6 +269,9 @@ declare namespace rest_api {
         flags: null | {
             [player_id: string]: GamePlayerFlags;
         };
+        // Only populated for moderators and AI detectors
+        simul_black?: boolean | null;
+        simul_white?: boolean | null;
     }
 
     namespace players.full {
@@ -298,6 +304,8 @@ declare namespace rest_api {
             json: games.GameData;
             id: number;
             name: string;
+            disable_vacation?: boolean;
+            time_per_move?: number;
         }
     }
 }

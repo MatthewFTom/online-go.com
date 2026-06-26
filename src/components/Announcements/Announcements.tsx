@@ -35,6 +35,7 @@ import {
     Announcement,
 } from "@/lib/announcement_utils";
 import { AnnouncementEntry } from "./AnnouncementEntry";
+import "./Announcements.css";
 
 interface Events {
     announcement: any;
@@ -248,6 +249,11 @@ export const Announcements: React.FC = React.memo(() => {
             <UIPush event="announcement" action={announce} />
 
             {sortedAnnouncements.map((announcement, idx) => {
+                // Only show system announcements in the popover bar
+                if (announcement.type !== "system") {
+                    return null;
+                }
+
                 const creator_blocked = getBlocks(announcement.creator.id).block_announcements;
                 const type_muted = announcementTypeMuted(announcement);
 

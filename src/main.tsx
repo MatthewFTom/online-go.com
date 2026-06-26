@@ -52,18 +52,19 @@ if (
 try {
     Sentry.init({
         dsn: "https://f8e3b8de571e412b98ff8f98e12c7f58@o589780.ingest.sentry.io/5750726",
-        autoSessionTracking: false,
         release: ogs_version || "dev",
         allowUrls: ["online-go.com", "kidsgoserver.com", "beta.online-go.com", "baduk.com"],
         environment: sentry_env,
         integrations: [
-            new Sentry.Integrations.GlobalHandlers({
+            Sentry.globalHandlersIntegration({
                 onerror: true,
                 onunhandledrejection: false,
             }),
-            new Sentry.Integrations.Breadcrumbs({
+            Sentry.breadcrumbsIntegration({
                 console: false,
             }),
+            // Note: browserSessionIntegration is intentionally excluded
+            // (equivalent to old autoSessionTracking: false)
         ],
 
         /* Several users have weird addons and extensions that cause errors
@@ -84,6 +85,9 @@ try {
             "?(<anonymous>)",
             "Cannot read properties of undefined (reading 'ns')",
 
+            // Transient network failures when loading CSS for lazy chunks
+            "Unable to preload CSS",
+
             // Library bugs
             ").ended is not a function", // d3
 
@@ -102,6 +106,30 @@ try {
 } catch (e) {
     console.error(e);
 }
+
+// Reload the page when a lazy chunk's CSS fails to preload for whatever
+// reason.
+const PRELOAD_INFINITE_LOOP_GUARD_KEY = "preloadErrorReloads";
+let preload_error_processed = false;
+window.addEventListener("vite:preloadError", () => {
+    if (preload_error_processed) {
+        return;
+    }
+    preload_error_processed = true;
+    const times_loaded = parseInt(
+        sessionStorage.getItem(PRELOAD_INFINITE_LOOP_GUARD_KEY) ?? "0",
+        10,
+    );
+    if (times_loaded < 2) {
+        sessionStorage.setItem(PRELOAD_INFINITE_LOOP_GUARD_KEY, String(times_loaded + 1));
+        window.location.reload();
+    }
+});
+setTimeout(() => {
+    // If this timer fires it means we're not in a preload infinite loop so we can
+    // clear out the guard
+    sessionStorage.removeItem(PRELOAD_INFINITE_LOOP_GUARD_KEY);
+}, 60000);
 
 try {
     window.onunhandledrejection = (e) => {
@@ -132,12 +160,11 @@ export function applyTheme() {
         }
     }
 
-    if (document.body.classList.contains(theme)) {
+    if (document.documentElement.dataset.theme === theme) {
         return;
     }
 
-    document.body.classList.remove("light", "dark", "accessible");
-    document.body.classList.add(theme);
+    document.documentElement.dataset.theme = theme;
 }
 window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", applyTheme);
 data.watch("theme", applyTheme);
@@ -190,7 +217,7 @@ import { get_device_id } from "@/views/SignIn";
 
 import { ConfigSchema } from "@/lib/data_schema";
 import "debug";
-import "@/ogs.styl";
+import "@/ogs.css";
 
 /**
  * getPreferredLanguage() is defined in index.html. It gets the user's chosen
@@ -221,6 +248,18 @@ if (cached_config) {
     for (const key in cached_config) {
         data.set(`config.${key as keyof ConfigSchema}`, (cached_config as any)[key]);
     }
+}
+
+/* In dev, the cached ui/config in localStorage (rehydrated by the loop above)
+ * includes a prod cdn_release that bypasses the vite /img/* middleware.
+ * Re-pin to the dev server so asset URLs in themes resolve against local disk.
+ *
+ * Gated on import.meta.env.DEV — statically replaced at build time, so the
+ * whole block is tree-shaken from production bundles and can never clobber a
+ * server-computed cdn_release in prod or self-hosted deployments. */
+if (import.meta.env.DEV && window.cdn_service) {
+    data.set("config.cdn", window.cdn_service);
+    data.set("config.cdn_release", window.cdn_service + "/" + (window.ogs_release || ""));
 }
 
 const user = data.get("config.user"); // guaranteed to return anonymous by the defaults, unless they are logged in
@@ -294,6 +333,14 @@ sockets.socket.on("user/update", (user: any) => {
         window.user = user;
     } else {
         console.log("Ignoring user update for user", user);
+    }
+});
+
+sockets.socket.on("config/last_game", (last_game: any) => {
+    const config = data.get("config");
+    if (config) {
+        config.last_game = last_game;
+        data.set("config", config);
     }
 });
 

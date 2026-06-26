@@ -17,6 +17,7 @@
 
 import * as React from "react";
 import { ObserveGamesComponent } from "@/components/ObserveGamesComponent";
+import "./ObserveGames.css";
 
 export class ObserveGames extends React.PureComponent {
     constructor(props: {}) {
@@ -27,7 +28,7 @@ export class ObserveGames extends React.PureComponent {
         return (
             <div className="ObserveGames">
                 <div className="container">
-                    <ObserveGamesComponent announcements={true} updateTitle={true} channel="" />
+                    <ObserveGamesComponent announcements={false} updateTitle={true} channel="" />
                 </div>
             </div>
         );

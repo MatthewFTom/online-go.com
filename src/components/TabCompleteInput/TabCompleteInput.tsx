@@ -17,17 +17,20 @@
 
 import * as React from "react";
 import * as player_cache from "@/lib/player_cache";
+import { maxMessageLength } from "@/lib/misc";
+import "./TabCompleteInput.css";
+import { interpolate, pgettext } from "@/lib/translate";
 
-interface TabCompleteInputProperties extends React.HTMLProps<HTMLInputElement> {
+interface TabCompleteInputProperties extends React.HTMLProps<HTMLTextAreaElement> {
     id?: string;
     placeholder?: string;
     disabled?: boolean;
-    onKeyPress?: React.KeyboardEventHandler<HTMLInputElement>;
+    onKeyPress?: React.KeyboardEventHandler<HTMLTextAreaElement>;
     className?: string;
-    onFocus?: (event: React.FocusEvent<HTMLInputElement>) => void;
+    onFocus?: (event: React.FocusEvent<HTMLTextAreaElement>) => void;
     autoFocus?: boolean;
     value?: string;
-    onChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
+    onChange?: (event: React.ChangeEvent<HTMLTextAreaElement>) => void;
 }
 
 interface MatchResult {
@@ -104,19 +107,60 @@ function matchFullName(input: string, nicknames: string[]): MatchResult {
     return { value: "", matches };
 }
 
-function setCaretPosition(input: HTMLInputElement, position: number) {
+function setCaretPosition(input: HTMLTextAreaElement, position: number) {
     input.setSelectionRange(position, position);
 }
 
-export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteInputProperties>(
+export const TabCompleteInput = React.forwardRef<HTMLTextAreaElement, TabCompleteInputProperties>(
     (props: TabCompleteInputProperties, ref): React.ReactElement => {
-        const defaultRef = React.useRef<HTMLInputElement>(null);
-        const inputRef = (ref as React.RefObject<HTMLInputElement>) || defaultRef;
+        const defaultRef = React.useRef<HTMLTextAreaElement>(null);
+        const inputRef = (ref as React.RefObject<HTMLTextAreaElement>) || defaultRef;
         const [lastKey, setLastKey] = React.useState<number>(0);
+        const [charCount, setCharCount] = React.useState<number>(0);
+        const [showWarning, setShowWarning] = React.useState<boolean>(false);
 
-        const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-            if (e.key === "Tab") {
+        const adjustHeight = React.useCallback((textarea: HTMLTextAreaElement) => {
+            const style = window.getComputedStyle(textarea);
+            const borderY = parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+            textarea.style.height = "0px";
+            textarea.style.height = `${Math.min(textarea.scrollHeight + borderY, 150)}px`;
+        }, []);
+
+        const checkCharCount = React.useCallback((text: string) => {
+            const length = text.length;
+            setCharCount(length);
+
+            const remaining = maxMessageLength - length;
+
+            if (remaining < 50) {
+                setShowWarning(true);
+            } else {
+                setShowWarning(false);
+            }
+        }, []);
+
+        const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+            // Don't act on Enter while an IME composition is in progress
+            // (e.g. confirming Japanese / Chinese / Korean candidates).
+            // keyCode === 229 is the legacy "IME process" code, kept as a
+            // fallback for browsers that don't reliably set isComposing on
+            // keydown.
+            if (e.nativeEvent.isComposing || e.keyCode === 229) {
+                return;
+            }
+            if (!e.shiftKey && e.key === "Enter") {
                 e.preventDefault();
+                props.onKeyPress?.(e);
+                // Reset height after sending
+                if (inputRef.current) {
+                    adjustHeight(inputRef.current);
+                    setCharCount(0);
+                    setShowWarning(false);
+                }
+                return;
+            }
+
+            if (e.key === "Tab") {
                 const input = inputRef.current;
                 if (!input) {
                     return;
@@ -126,6 +170,7 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
                 const start = input.selectionStart || 0;
                 const text = value.substr(0, start);
                 const nickMatch = /([-_a-z0-9]+)$/i;
+                let autocompletedSomething = false;
 
                 if (nickMatch.test(text)) {
                     const match = text.match(nickMatch);
@@ -135,6 +180,8 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
 
                     const matchResult = matchName(match[1], player_cache.nicknames);
                     if (matchResult.value) {
+                        e.preventDefault();
+                        autocompletedSomething = true;
                         const first = value.substr(0, start - match[1].length);
                         const last = value.substr(start);
                         const space =
@@ -150,7 +197,10 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
 
                         input.value = newValue;
                         setCaretPosition(input, newPosition);
-                        props.onChange?.({ target: input } as React.ChangeEvent<HTMLInputElement>);
+                        props.onChange?.({
+                            target: input,
+                        } as React.ChangeEvent<HTMLTextAreaElement>);
+                        adjustHeight(input);
                     }
                 } else if (/( |: )$/.test(text)) {
                     const spaceMatch = text.match(/( |: )$/);
@@ -163,6 +213,8 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
                     const matchResult = matchFullName(textWithoutSpace, player_cache.nicknames);
 
                     if (matchResult.value) {
+                        e.preventDefault();
+                        autocompletedSomething = true;
                         const first = value.substr(
                             0,
                             start - matchResult.value.length - space.length,
@@ -181,16 +233,21 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
 
                         input.value = newValue;
                         setCaretPosition(input, newPosition);
-                        props.onChange?.({ target: input } as React.ChangeEvent<HTMLInputElement>);
+                        props.onChange?.({
+                            target: input,
+                        } as React.ChangeEvent<HTMLTextAreaElement>);
+                        adjustHeight(input);
                     }
                 }
 
-                setLastKey(9);
+                if (autocompletedSomething) {
+                    setLastKey(9);
+                }
             }
             props.onKeyPress?.(e);
         };
 
-        const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+        const handleFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
             setLastKey(0);
             props.onFocus?.(e);
         };
@@ -201,15 +258,40 @@ export const TabCompleteInput = React.forwardRef<HTMLInputElement, TabCompleteIn
             }
         };
 
+        const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            props.onChange?.(e);
+            if (inputRef.current) {
+                adjustHeight(inputRef.current);
+                checkCharCount(inputRef.current.value);
+            }
+        };
+
         return (
-            <input
-                ref={inputRef}
-                enterKeyHint="send"
-                {...props}
-                onKeyDown={handleKeyDown}
-                onFocus={handleFocus}
-                onBlur={handleBlur}
-            />
+            <div className="chat-input-wrapper">
+                {showWarning && (
+                    <div
+                        className={`chat-count-warning ${charCount > maxMessageLength ? "error" : "warning"}`}
+                    >
+                        {charCount > maxMessageLength
+                            ? interpolate(pgettext("chat character count", "%d over limit"), [
+                                  charCount - maxMessageLength,
+                              ])
+                            : interpolate(pgettext("chat character count", "%d left"), [
+                                  maxMessageLength - charCount,
+                              ])}
+                    </div>
+                )}
+                <textarea
+                    ref={inputRef}
+                    enterKeyHint="send"
+                    {...props}
+                    onKeyDown={handleKeyDown}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
+                    onChange={handleChange}
+                    rows={1}
+                />
+            </div>
         );
     },
 );

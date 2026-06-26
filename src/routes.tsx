@@ -18,7 +18,14 @@
 /* cspell: words groupadmin cotsen */
 
 import * as React from "react";
-import { BrowserRouter as Router, Route, Routes, Navigate, useNavigate } from "react-router-dom";
+import {
+    BrowserRouter as Router,
+    Route,
+    Routes,
+    Navigate,
+    useNavigate,
+    useSearchParams,
+} from "react-router-dom";
 
 import * as data from "@/lib/data";
 import { _ } from "@/lib/translate";
@@ -30,8 +37,18 @@ import { Announcements } from "@/components/Announcements";
 import { SignIn } from "@/views/SignIn";
 import { Register } from "@/views/Register";
 import { ChallengeLinkLanding } from "@/views/ChallengeLinkLanding";
-import { Overview } from "@/views/Overview";
-import { Admin, MerchantLog, FlaggedGames, OnlineLeaguesAdmin } from "@/views/Admin";
+import { Home } from "@/views/Home";
+import {
+    Admin,
+    MerchantLog,
+    FlaggedGames,
+    OnlineLeaguesAdmin,
+    AnnulmentCriteriaSettings,
+    AIReviewStatus,
+    AIReviewRequestStats,
+    WhatsNewAdmin,
+} from "@/views/Admin";
+import { WhatsNew } from "@/views/WhatsNew";
 import { ChatView } from "@/views/ChatView";
 import { Developer } from "@/views/Developer";
 import { Game } from "@/views/Game";
@@ -43,8 +60,9 @@ import { GroupList } from "@/views/GroupList";
 import { Ladder } from "@/views/Ladder";
 import { LadderList } from "@/views/LadderList";
 import { LibraryPlayer } from "@/views/LibraryPlayer";
+import { Kibitz } from "@/views/Kibitz";
 import { Play } from "@/views/Play";
-import { Moderator } from "@/views/Moderator";
+import { Moderator } from "@moderator-ui/Moderator";
 import { ObserveGames } from "@/views/ObserveGames";
 import { Puzzle } from "@/views/Puzzle";
 import { PuzzleList } from "@/views/PuzzleList";
@@ -65,13 +83,14 @@ import { ForceUsernameChange } from "@/views/ForceUsernameChange";
 import { BlockedVPN } from "@/views/BlockedVPN";
 import { Firewall } from "@/views/Firewall";
 import { Appeal } from "@/views/Appeal";
-import { AppealsCenter } from "@/views/AppealsCenter";
-import { ReportsCenter } from "@/views/ReportsCenter";
+import { AppealsCenter } from "@moderator-ui/AppealsCenter";
+import { ReportsCenter } from "@moderator-ui/ReportsCenter";
 import { Experiment, Variant, Default as ExDefault } from "@/components/Experiment";
 import { RatingCalculator } from "@/views/RatingCalculator";
 import { AccountWarning } from "@/components/AccountWarning";
 import { NetworkStatus } from "@/components/NetworkStatus";
-import { PrizeBatchList, PrizeBatch, PrizeRedemption } from "@/views/Prizes";
+import { PrizeRedemption, SponsorshipRequest } from "@/views/Prizes";
+import { PrizeBatchList, PrizeBatch, SponsorshipRequestDetail } from "@moderator-ui/Prizes";
 import { GoTV } from "@/views/GoTV";
 import { Loading } from "@/components/Loading";
 
@@ -79,10 +98,16 @@ import * as docs from "@/views/docs";
 import { useData } from "./lib/hooks";
 import { MainSection } from "@/components/MainSection";
 import { AccessibilityMenu } from "@/components/AccessibilityMenu";
-import { AIDetection } from "@moderator-ui/AIDetection";
+import { RecentlyBlocked } from "@moderator-ui/RecentlyBlocked";
+import {
+    FairPlay,
+    FairPlayActions,
+    FairPlayLogicDump,
+    FairPlaySearch,
+} from "@moderator-ui/FairPlay";
 
 const LearningHub = React.lazy(() =>
-    import(/* webpackChunkName: "learning-hub" */ "@/views/LearningHub").then((m) => ({
+    import("@/views/LearningHub/LearningHub").then((m) => ({
         default: m.LearningHub,
     })),
 );
@@ -201,7 +226,7 @@ function Default(): React.ReactElement {
         return <ObserveGames />;
     }
 
-    return <Overview />;
+    return <Home />;
 }
 
 function ChatRedirect(): React.ReactElement {
@@ -239,6 +264,34 @@ function SettingsRedirect(): React.ReactElement {
     return <Navigate to={`/settings/${last_settings_page}`} replace />;
 }
 
+function AIDetectionRedirect(): React.ReactElement {
+    const [searchParams] = useSearchParams();
+    const newParams = new URLSearchParams();
+    newParams.set("mode", "basic");
+
+    // Preserve the player filter from the old AI Detection URL
+    const player = searchParams.get("player");
+    if (player) {
+        newParams.set("player", player);
+    }
+
+    // Map old threshold params to new field names
+    const apl = searchParams.get("apl");
+    if (apl) {
+        newParams.set("asl", apl);
+    }
+    const minMoves = searchParams.get("min_moves");
+    if (minMoves) {
+        newParams.set("min_moves", minMoves);
+    }
+    const applyFilters = searchParams.get("apply_filters");
+    if (applyFilters) {
+        newParams.set("apply_filters", applyFilters);
+    }
+
+    return <Navigate to={`/moderator/fair-play-search?${newParams.toString()}`} replace />;
+}
+
 function WaitForUser(): React.ReactElement | null {
     const navigate = useNavigate();
     data.watch("config.user", (user) => {
@@ -268,12 +321,14 @@ export const routes = (
                 <Route path="/reports-center/:category/:report_id" element={<ReportsCenter />} />
                 <Route path="/reports-center/:category" element={<ReportsCenter />} />
                 <Route path="/reports-center" element={<ReportsCenter />} />
-                <Route path="/overview" element={<Overview />} />
+                <Route path="/overview" element={<Home />} />
                 <Route path="/play/*" element={<Play />} />
                 <Route path="/chat/:channel" element={<ChatView />} />
                 <Route path="/chat/:channel/*" element={<ChatView />} />
                 <Route path="/chat/:channel/**/*" element={<ChatView />} />
                 <Route path="/chat" element={<ChatRedirect />} />
+                <Route path="/kibitz/:roomId" element={<Kibitz />} />
+                <Route path="/kibitz" element={<Kibitz />} />
                 <Route path="/observe-games" element={<ObserveGames />} />
                 <Route path="/game/view/:game_id" element={<Game />} />
                 <Route path="/game/:game_id/:move_number" element={<Game />} />
@@ -358,17 +413,31 @@ export const routes = (
                     element={<OnlineLeagueSpectatorLanding />}
                 />
                 <Route path="/developer" element={<Developer />} />
-                <Route path="/moderator/ai-detection" element={<AIDetection />} />
+                <Route path="/moderator/ai-detection" element={<AIDetectionRedirect />} />
+                <Route path="/moderator/recently-blocked" element={<RecentlyBlocked />} />
+                <Route path="/moderator/fair-play" element={<FairPlay />} />
+                <Route path="/moderator/fair-play/:id" element={<FairPlay />} />
+                <Route path="/moderator/fair-play-search" element={<FairPlaySearch />} />
+                <Route path="/moderator/fair-play-actions" element={<FairPlayActions />} />
+                <Route path="/moderator/fair-play-logic-dump" element={<FairPlayLogicDump />} />
                 <Route path="/admin/merchant_log" element={<MerchantLog />} />
                 <Route path="/admin/firewall" element={<Firewall />} />
                 <Route path="/admin/flagged_games" element={<FlaggedGames />} />
                 <Route path="/admin/online_leagues" element={<OnlineLeaguesAdmin />} />
+                <Route path="/admin/annulment_criteria" element={<AnnulmentCriteriaSettings />} />
+                <Route path="/admin/ai_review_status" element={<AIReviewStatus />} />
+                <Route path="/admin/ai_review_request_stats" element={<AIReviewRequestStats />} />
+                <Route path="/admin/whats_new" element={<WhatsNewAdmin />} />
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/whats-new" element={<WhatsNew />} />
+                <Route path="/whats-new/:postId" element={<WhatsNew />} />
                 <Route path="/announcement-center" element={<AnnouncementCenter />} />
                 <Route path="/redeem" element={<PrizeRedemption />} />
                 <Route path="/redeem/:code" element={<PrizeRedemption />} />
                 <Route path="/prize-batches/:id" element={<PrizeBatch />} />
                 <Route path="/prize-batches" element={<PrizeBatchList />} />
+                <Route path="/sponsorship-request" element={<SponsorshipRequest />} />
+                <Route path="/sponsorship-requests/:id" element={<SponsorshipRequestDetail />} />
                 {/*
                   <Route path="/admin/tournament-scheduler/:schedule_id" element={<TournamentModify />}/>
                   <Route path="/admin/tournament-schedule-list" element={<AdminTournamentScheduleList />}/>

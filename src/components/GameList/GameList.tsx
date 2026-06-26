@@ -32,6 +32,7 @@ import {
     AdHocPackedMove,
     GobanRenderer,
 } from "goban";
+import "./GameList.css";
 
 interface UserType {
     id: number;
@@ -66,7 +67,9 @@ interface GameListProps {
     miniGobanProps?: any;
     namesByGobans?: boolean;
     forceList?: boolean;
+    forceMiniGoban?: boolean;
     lineSummaryMode: LineSummaryTableMode;
+    onSelectGameId?: (gameId: number) => void;
 }
 
 type SortOrder = "clock" | "move-number" | "name" | "opponent" | "opponent-clock" | "size";
@@ -364,7 +367,10 @@ export class GameList extends React.PureComponent<GameListProps, GameListState> 
 
         if (games.length === 0) {
             return <div className="container">{this.props.emptyMessage || ""}</div>;
-        } else if (this.props.forceList || games.length > preferences.get("game-list-threshold")) {
+        } else if (
+            !this.props.forceMiniGoban &&
+            (this.props.forceList || games.length > preferences.get("game-list-threshold"))
+        ) {
             return (
                 <LineSummaryTable
                     list={games}
@@ -376,6 +382,7 @@ export class GameList extends React.PureComponent<GameListProps, GameListState> 
                     onGobanCreated={(game: GameType, goban: GobanRenderer) =>
                         this.onGobanCreated(game, goban)
                     }
+                    onSelectGameId={this.props.onSelectGameId}
                 ></LineSummaryTable>
             );
         } else {
@@ -385,6 +392,7 @@ export class GameList extends React.PureComponent<GameListProps, GameListState> 
                 (game: GameType, goban: GobanRenderer) => this.onGobanCreated(game, goban),
                 this.props?.player,
                 this.props.miniGobanProps,
+                this.props.onSelectGameId,
             );
         }
     }
@@ -392,6 +400,12 @@ export class GameList extends React.PureComponent<GameListProps, GameListState> 
     onGobanCreated(game: GameType, goban: GobanRenderer) {
         // Save a pointer into the goban to use when sorting.
         game.goban = goban;
+
+        // Re-sort when a move is made so games where it's your turn
+        // are sorted to the top.
+        goban.on("move-made", () => {
+            this.forceRender();
+        });
 
         // Render again once goban has a valid clock to set the sorted order.
         if (goban.last_emitted_clock === undefined) {
@@ -420,6 +434,7 @@ interface LineSummaryTableProps extends GameListProps {
     currentSort: SortOrder | DescendingSortOrder;
     onSort: (sortBy: SortOrder) => void;
     onGobanCreated: (game: GameType, goban: GobanRenderer) => void;
+    onSelectGameId?: (gameId: number) => void;
 }
 
 function LineSummaryTable({
@@ -430,6 +445,7 @@ function LineSummaryTable({
     currentSort,
     onSort,
     onGobanCreated,
+    onSelectGameId,
 }: LineSummaryTableProps): React.ReactElement {
     const getHeaderClassName = (sortOrder: SortOrder) => {
         const sortable = disableSort && player ? "" : "sortable";
@@ -514,6 +530,7 @@ function LineSummaryTable({
                     height={game.height}
                     rengo_teams={game.json?.rengo_teams}
                     lineSummaryMode={lineSummaryMode}
+                    onSelectGameId={onSelectGameId}
                 />
             ))}
         </div>
@@ -526,6 +543,7 @@ function MiniGobanList(
     onGobanCreated: (game: GameType, goban: GobanRenderer) => void,
     player?: { id: number },
     miniGobanProps?: MiniGobanProps,
+    onSelectGameId?: (gameId: number) => void,
 ): React.ReactElement {
     return (
         <div className="GameList">
@@ -541,6 +559,7 @@ function MiniGobanList(
                         }
                         player={player}
                         {...(miniGobanProps || {})}
+                        onSelectGameId={onSelectGameId ?? miniGobanProps?.onSelectGameId}
                     />
                 );
                 if (withNames) {
