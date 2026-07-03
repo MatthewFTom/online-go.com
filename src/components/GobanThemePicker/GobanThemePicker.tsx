@@ -22,6 +22,7 @@ import { getSelectedThemes, usePreference } from "@/lib/preferences";
 import { PersistentElement } from "@/components/PersistentElement";
 import { Experiment, Variant, Default } from "../Experiment";
 import { LineText } from "../misc-ui";
+import { GobanCustomBoardGridBackgroundPicker } from "./GobanCustomBoardGridBackgroundPicker";
 import "./GobanThemePicker.css";
 
 interface GobanThemePickerProperties {
@@ -124,11 +125,15 @@ export function GobanCustomBoardPicker(props: GobanThemePickerProperties): React
         "goban-theme-custom-board-background",
     );
     const [background_image, _setBackgroundImage] = usePreference("goban-theme-custom-board-url");
+    const [grid_backgrounds] = usePreference("goban-theme-custom-board-grid-backgrounds");
     const sample_canvas = React.useRef<HTMLCanvasElement | undefined>(undefined);
     const [, refresh] = React.useState(0);
     const theme = Goban.THEMES_SORTED.board.filter((x) => x.theme_name === "Custom")[0];
     const [, setBoard] = usePreference("goban-theme-board");
     const selected = getSelectedThemes();
+    const [advanced_open, setAdvancedOpen] = React.useState(
+        () => !!background_image || Object.values(grid_backgrounds).some((url) => !!url),
+    );
 
     const inputStyle = { height: `${size}px`, width: `${size * 1.5}px` };
 
@@ -200,22 +205,40 @@ export function GobanCustomBoardPicker(props: GobanThemePickerProperties): React
                 </div>
             </div>
 
-            <div className="custom-url-selection">
-                <input
-                    className="customUrlSelector"
-                    type="text"
-                    value={background_image}
-                    placeholder={pgettext(
-                        "Custom background image url for the goban",
-                        "Custom background URL",
-                    )}
-                    onFocus={(e) => e.target.select()}
-                    onChange={setBackgroundImage}
-                />
-
-                <button className="color-reset" onClick={() => _setBackgroundImage("")}>
-                    <i className="fa fa-undo" />
+            <div className="custom-board-advanced">
+                <button
+                    type="button"
+                    className="advanced-toggle"
+                    aria-expanded={advanced_open}
+                    onClick={() => setAdvancedOpen((open) => !open)}
+                >
+                    <i className={`fa fa-caret-${advanced_open ? "down" : "right"}`} />
+                    <span>{pgettext("Advanced custom board theme settings", "Advanced")}</span>
                 </button>
+
+                {advanced_open && (
+                    <div className="advanced-content">
+                        <div className="custom-url-selection">
+                            <input
+                                className="customUrlSelector"
+                                type="text"
+                                value={background_image}
+                                placeholder={pgettext(
+                                    "Custom background image url for the goban",
+                                    "Custom background URL",
+                                )}
+                                onFocus={(e) => e.target.select()}
+                                onChange={setBackgroundImage}
+                            />
+
+                            <button className="color-reset" onClick={() => _setBackgroundImage("")}>
+                                <i className="fa fa-undo" />
+                            </button>
+                        </div>
+
+                        <GobanCustomBoardGridBackgroundPicker />
+                    </div>
+                )}
             </div>
         </div>
     );
